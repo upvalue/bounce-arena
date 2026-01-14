@@ -1,0 +1,17 @@
+{
+  "name": "recurse-jam",
+  "version": "1.0.0",
+  "description": "Bounce Arena - A Love2D game",
+  "scripts": {
+    "build": "love.js game dist -t \"Bounce Arena\" -c",
+    "serve": "pnpm build && npx serve dist",
+    "clean": "rm -rf dist"
+  },
+  "keywords": ["love2d", "game"],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "love.js": "^11.4.1",
+    "serve": "^14.2.4"
+  }
+}
