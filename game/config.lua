@@ -36,7 +36,58 @@ config.enemies = {
         health = 2,
         expValue = 2,
         color = {0.6, 0.2, 0.8}  -- purple
+    },
+    fastTrooper = {
+        size = 8,
+        speed = 350,  -- faster than player (300)
+        damage = 1,
+        health = 1,
+        expValue = 2,
+        movementDelay = 2,  -- seconds before starting to move
+        color = {1, 0.6, 0.2}  -- orange
+    },
+    xTurret = {
+        size = 16,
+        speed = 0,
+        damage = 0,
+        health = 3,
+        expValue = 3,
+        color = {0.8, 0.3, 0.3},
+        fireRate = 2.0,
+        directions = {{1, 0}, {-1, 0}},  -- right, left
+        isTurret = true
+    },
+    yTurret = {
+        size = 16,
+        speed = 0,
+        damage = 0,
+        health = 3,
+        expValue = 3,
+        color = {0.8, 0.3, 0.3},
+        fireRate = 2.0,
+        directions = {{0, 1}, {0, -1}},  -- down, up
+        isTurret = true
+    },
+    xyTurret = {
+        size = 16,
+        speed = 0,
+        damage = 0,
+        health = 3,
+        expValue = 3,
+        color = {0.8, 0.3, 0.3},
+        fireRate = 2.0,
+        directions = {{0.707, 0.707}, {-0.707, 0.707}, {0.707, -0.707}, {-0.707, -0.707}},
+        isTurret = true
     }
+}
+
+-- Turret projectile settings
+config.turretProjectile = {
+    size = 4,
+    speed = 150,
+    lifetime = 5,
+    damage = 1,
+    color = {1, 0.3, 0.3}  -- red-ish
 }
 
 -- Visual effects
@@ -76,13 +127,19 @@ config.projectile = {
 -- Wave definitions: start time and enemy counts by type
 config.waves = {
     -- each level should be 2:30 for a total playtime of 10 minutes
-    { start = 0,  trooper = 7 },
+
+    -- level 1
+
+    { start = 0,  trooper = 7},
     { start = 20, trooper = 10, toughTrooper = 1 },
     { start = 40, trooper = 13, toughTrooper = 5 },
     { start = 60, trooper = 16, toughTrooper = 7 },
-    -- new enemy here? 
     { start = 80, trooper = 20, toughTrooper = 8 },
-    { start = 100, trooper = 20, toughTrooper = 8 },
+    { start = 100, trooper = 15, toughTrooper = 6, xTurret = 1, yTurret = 1},
+    { start = 120, trooper = 10, toughTrooper = 5, xyTurret = 2},
+    { start = 140, trooper = 10, toughTrooper = 5, fastTrooper = 2},
+
+    -- { start = 100, trooper = 20, toughTrooper = 8 },
 
 
 }
@@ -94,7 +151,7 @@ config.experience = {
     color = {0.3, 0.5, 1},  -- blue
     attractRadius = 250,
     attractSpeed = 200,
-    growthAmount = 0.2
+    growthAmount = 0.04
 }
 
 return config

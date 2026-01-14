@@ -35,7 +35,12 @@ local function spawnWave(waveConfig)
             local enemyType = config.enemies[typeName]
             if enemyType then
                 for i = 1, count do
-                    local enemy = entities.spawnEnemyAtEdge(arena, player, nil, enemyType)
+                    local enemy
+                    if enemyType.isTurret then
+                        enemy = entities.spawnTurretAtEdge(arena, nil, enemyType)
+                    else
+                        enemy = entities.spawnEnemyAtEdge(arena, player, nil, enemyType)
+                    end
                     world:addEntity(enemy)
                     enemiesAlive = enemiesAlive + 1
                 end
@@ -55,30 +60,29 @@ local function startGame()
     projectilesActive = 0
     events.clear()
 
-    -- Create ECS world once, or clear existing entities
-    if world then
-        world:clearEntities()
-    else
-        world = tiny.world()
-        world.arena = arena
-        world.config = config
+    -- Always create a fresh world - more robust than trying to clear/reuse
+    world = tiny.world()
+    world.arena = arena
+    world.config = config
 
-        -- Add systems in order (update systems first, then render systems)
-        world:addSystem(systems.playerInput)
-        world:addSystem(systems.seeking)
-        world:addSystem(systems.attraction)
-        world:addSystem(systems.movement)
-        world:addSystem(systems.bounce)
-        world:addSystem(systems.arenaClamp)
-        world:addSystem(systems.lifetime)
-        world:addSystem(systems.damageCooldown)
-        world:addSystem(systems.invulnerability)
-        world:addSystem(systems.flash)
-        world:addSystem(systems.collision)
-        world:addSystem(systems.render)
-        world:addSystem(systems.aimingLine)
-        world:addSystem(systems.hud)
-    end
+    -- Add systems in order (update systems first, then render systems)
+    -- This also triggers onAddToWorld which resets system internal state
+    world:addSystem(systems.playerInput)
+    world:addSystem(systems.movementDelay)
+    world:addSystem(systems.seeking)
+    world:addSystem(systems.attraction)
+    world:addSystem(systems.movement)
+    world:addSystem(systems.bounce)
+    world:addSystem(systems.arenaClamp)
+    world:addSystem(systems.lifetime)
+    world:addSystem(systems.damageCooldown)
+    world:addSystem(systems.invulnerability)
+    world:addSystem(systems.shooting)
+    world:addSystem(systems.flash)
+    world:addSystem(systems.collision)
+    world:addSystem(systems.render)
+    world:addSystem(systems.aimingLine)
+    world:addSystem(systems.hud)
 
     -- Create player at center
     player = entities.createPlayer(
@@ -116,6 +120,10 @@ local function startGame()
             flashEntity(data.player)
             makeInvulnerable(data.player)
             projectilesActive = projectilesActive - 1
+        elseif data.type == "enemy_projectile_hit_player" then
+            data.player.Health.current = data.player.Health.current - data.damage
+            flashEntity(data.player)
+            makeInvulnerable(data.player)
         elseif data.type == "projectile_hit_enemy" then
             if data.projectileDestroyed then
                 projectilesActive = projectilesActive - 1

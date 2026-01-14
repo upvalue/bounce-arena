@@ -26,7 +26,7 @@ end
 
 function entities.createEnemy(x, y, target, enemyType)
     enemyType = enemyType or config.enemies.trooper
-    return {
+    local enemy = {
         x = x,
         y = y,
         vx = 0,
@@ -43,6 +43,11 @@ function entities.createEnemy(x, y, target, enemyType)
             layer = 5
         }
     }
+    -- Add movement delay if configured
+    if enemyType.movementDelay then
+        enemy.MovementDelay = { remaining = enemyType.movementDelay }
+    end
+    return enemy
 end
 
 function entities.createProjectile(x, y, dirX, dirY)
@@ -147,6 +152,79 @@ function entities.createExperience(x, y, target, value)
             layer = 3
         }
     }
+end
+
+function entities.createTurret(x, y, turretType)
+    turretType = turretType or config.enemies.xTurret
+    return {
+        x = x,
+        y = y,
+        vx = 0,
+        vy = 0,
+        Health = { current = turretType.health, max = turretType.health },
+        Collider = { radius = turretType.size },
+        DamagesPlayer = { amount = turretType.damage or 0 },  -- needed for collision tracking
+        expValue = turretType.expValue or 1,
+        Shooter = {
+            fireRate = turretType.fireRate,
+            fireTimer = turretType.fireRate,  -- start ready to fire
+            directions = turretType.directions
+        },
+        Render = {
+            type = "turret",
+            radius = turretType.size * 0.4,  -- small center circle
+            lineLength = turretType.size,    -- length of direction lines
+            directions = turretType.directions,
+            color = turretType.color,
+            layer = 5
+        }
+    }
+end
+
+function entities.createEnemyProjectile(x, y, dirX, dirY)
+    local cfg = config.turretProjectile
+    return {
+        x = x,
+        y = y,
+        vx = dirX * cfg.speed,
+        vy = dirY * cfg.speed,
+        Collider = { radius = cfg.size },
+        Lifetime = { remaining = cfg.lifetime },
+        DamagesPlayer = { amount = cfg.damage },
+        EnemyProjectile = true,  -- flag to skip enemy collisions
+        Render = {
+            type = "circle",
+            radius = cfg.size,
+            color = cfg.color,
+            layer = 7
+        }
+    }
+end
+
+function entities.spawnTurretAtEdge(arena, rng, turretType)
+    rng = rng or math.random
+    turretType = turretType or config.enemies.xTurret
+    -- Spawn turrets further from wall (50 pixels + size)
+    local margin = 50 + turretType.size
+
+    local side = rng(1, 4)
+    local x, y
+
+    if side == 1 then -- top
+        x = arena.x + margin + rng() * (arena.width - margin * 2)
+        y = arena.y + margin
+    elseif side == 2 then -- bottom
+        x = arena.x + margin + rng() * (arena.width - margin * 2)
+        y = arena.y + arena.height - margin
+    elseif side == 3 then -- left
+        x = arena.x + margin
+        y = arena.y + margin + rng() * (arena.height - margin * 2)
+    else -- right
+        x = arena.x + arena.width - margin
+        y = arena.y + margin + rng() * (arena.height - margin * 2)
+    end
+
+    return entities.createTurret(x, y, turretType)
 end
 
 return entities

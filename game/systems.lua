@@ -48,10 +48,25 @@ function systems.playerInput:process(e, dt)
     e.vy = dy * e.PlayerInput.speed
 end
 
+-- Movement delay system: decrements delay timer before enemy can move
+systems.movementDelay = tiny.processingSystem()
+systems.movementDelay.filter = tiny.requireAll("MovementDelay")
+function systems.movementDelay:process(e, dt)
+    if not e.MovementDelay then return end
+    e.MovementDelay.remaining = e.MovementDelay.remaining - dt
+    if e.MovementDelay.remaining <= 0 then
+        e.MovementDelay = nil
+        self.world:addEntity(e)  -- refresh to remove from system
+    end
+end
+
 -- Seeking system: moves toward target
 systems.seeking = tiny.processingSystem()
 systems.seeking.filter = tiny.requireAll("x", "y", "vx", "vy", "SeeksTarget")
 function systems.seeking:process(e, dt)
+    -- Skip if movement is delayed
+    if e.MovementDelay then return end
+
     local target = e.SeeksTarget.target
     if not target then return end
 
@@ -168,6 +183,24 @@ function systems.invulnerability:process(e, dt)
     end
 end
 
+-- Shooting system: handles turrets firing projectiles
+local entities = require("entities")
+systems.shooting = tiny.processingSystem()
+systems.shooting.filter = tiny.requireAll("x", "y", "Shooter")
+function systems.shooting:process(e, dt)
+    local shooter = e.Shooter
+    shooter.fireTimer = shooter.fireTimer - dt
+
+    if shooter.fireTimer <= 0 then
+        -- Fire in all configured directions
+        for _, dir in ipairs(shooter.directions) do
+            local proj = entities.createEnemyProjectile(e.x, e.y, dir[1], dir[2])
+            self.world:addEntity(proj)
+        end
+        shooter.fireTimer = shooter.fireRate
+    end
+end
+
 -- Collision system: handles all collision detection and response
 systems.collision = tiny.system()
 systems.collision.filter = tiny.requireAll("x", "y", "Collider")
@@ -175,11 +208,15 @@ function systems.collision:onAddToWorld(world)
     self.player = nil
     self.enemies = {}
     self.projectiles = {}
+    self.enemyProjectiles = {}
     self.experience = {}
 end
 function systems.collision:onAdd(e)
     if e.PlayerInput then
         self.player = e
+    elseif e.EnemyProjectile then
+        -- Enemy projectiles tracked separately (pass through enemies)
+        table.insert(self.enemyProjectiles, e)
     elseif e.DamagesPlayer then
         table.insert(self.enemies, e)
     elseif e.DamagesEnemy then
@@ -201,6 +238,12 @@ function systems.collision:onRemove(e)
     for i = #self.projectiles, 1, -1 do
         if self.projectiles[i] == e then
             table.remove(self.projectiles, i)
+            break
+        end
+    end
+    for i = #self.enemyProjectiles, 1, -1 do
+        if self.enemyProjectiles[i] == e then
+            table.remove(self.enemyProjectiles, i)
             break
         end
     end
@@ -325,6 +368,20 @@ function systems.collision:update(dt)
         end
     end
 
+    -- Enemy projectile-player collisions (turret shots, skip if invulnerable)
+    for i = #self.enemyProjectiles, 1, -1 do
+        local proj = self.enemyProjectiles[i]
+        if proj and not toRemove[proj] and not player.Invulnerable and collides(proj, player) then
+            events.emit("collision", {
+                type = "enemy_projectile_hit_player",
+                projectile = proj,
+                player = player,
+                damage = proj.DamagesPlayer.amount
+            })
+            toRemove[proj] = true
+        end
+    end
+
     -- Experience-player collisions (pickup)
     for i = #self.experience, 1, -1 do
         local exp = self.experience[i]
@@ -379,6 +436,17 @@ function systems.render:process(e, dt)
         love.graphics.circle("fill", e.x, e.y, r.radius)
     elseif r.type == "rectangle" then
         love.graphics.rectangle("fill", e.x - r.width/2, e.y - r.height/2, r.width, r.height)
+    elseif r.type == "turret" then
+        -- Draw center circle
+        love.graphics.circle("fill", e.x, e.y, r.radius)
+        -- Draw direction lines
+        love.graphics.setLineWidth(2)
+        for _, dir in ipairs(r.directions) do
+            local endX = e.x + dir[1] * r.lineLength
+            local endY = e.y + dir[2] * r.lineLength
+            love.graphics.line(e.x, e.y, endX, endY)
+        end
+        love.graphics.setLineWidth(1)
     end
 end
 
