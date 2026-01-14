@@ -24,19 +24,22 @@ function entities.createPlayer(x, y)
     }
 end
 
-function entities.createEnemy(x, y, target)
+function entities.createEnemy(x, y, target, enemyType)
+    enemyType = enemyType or config.enemies.trooper
     return {
         x = x,
         y = y,
         vx = 0,
         vy = 0,
-        Collider = { radius = config.enemy.size },
-        SeeksTarget = { target = target, speed = config.enemy.speed },
-        DamagesPlayer = { amount = config.enemy.damage },
+        Health = { current = enemyType.health, max = enemyType.health },
+        Collider = { radius = enemyType.size },
+        SeeksTarget = { target = target, speed = enemyType.speed },
+        DamagesPlayer = { amount = enemyType.damage },
+        expValue = enemyType.expValue or 1,
         Render = {
             type = "circle",
-            radius = config.enemy.size,
-            color = config.enemy.color,
+            radius = enemyType.size,
+            color = enemyType.color,
             layer = 5
         }
     }
@@ -57,6 +60,7 @@ function entities.createProjectile(x, y, dirX, dirY)
         vy = vy,
         Collider = { radius = config.projectile.size },
         Bounces = {},
+        EnemyBounces = { count = 0, max = config.projectile.maxEnemyBounces },
         Lifetime = { remaining = config.projectile.lifetime },
         DamagesEnemy = { amount = config.projectile.damage },
         Render = {
@@ -68,27 +72,81 @@ function entities.createProjectile(x, y, dirX, dirY)
     }
 end
 
-function entities.spawnEnemyAtEdge(arena, target, rng)
+function entities.spawnEnemyAtEdge(arena, target, rng, enemyType)
     rng = rng or math.random
+    enemyType = enemyType or config.enemies.trooper
+    local margin = enemyType.size
+    local safeRadius = config.spawn.safeRadius
+
+    -- Try up to 10 times to find a safe spawn point
+    for attempt = 1, 10 do
+        local side = rng(1, 4)
+        local x, y
+
+        if side == 1 then -- top
+            x = arena.x + rng() * arena.width
+            y = arena.y + margin
+        elseif side == 2 then -- bottom
+            x = arena.x + rng() * arena.width
+            y = arena.y + arena.height - margin
+        elseif side == 3 then -- left
+            x = arena.x + margin
+            y = arena.y + rng() * arena.height
+        else -- right
+            x = arena.x + arena.width - margin
+            y = arena.y + rng() * arena.height
+        end
+
+        -- Check distance from target (player)
+        if target then
+            local dx = x - target.x
+            local dy = y - target.y
+            local dist = math.sqrt(dx * dx + dy * dy)
+            if dist >= safeRadius then
+                return entities.createEnemy(x, y, target, enemyType)
+            end
+        else
+            return entities.createEnemy(x, y, target, enemyType)
+        end
+    end
+
+    -- Fallback: spawn anyway on last attempt position
     local side = rng(1, 4)
     local x, y
-    local margin = config.enemy.size
-
-    if side == 1 then -- top
+    if side == 1 then
         x = arena.x + rng() * arena.width
         y = arena.y + margin
-    elseif side == 2 then -- bottom
+    elseif side == 2 then
         x = arena.x + rng() * arena.width
         y = arena.y + arena.height - margin
-    elseif side == 3 then -- left
+    elseif side == 3 then
         x = arena.x + margin
         y = arena.y + rng() * arena.height
-    else -- right
+    else
         x = arena.x + arena.width - margin
         y = arena.y + rng() * arena.height
     end
+    return entities.createEnemy(x, y, target, enemyType)
+end
 
-    return entities.createEnemy(x, y, target)
+function entities.createExperience(x, y, target, value)
+    return {
+        x = x,
+        y = y,
+        Collider = { radius = config.experience.size },
+        Experience = { value = value or config.experience.value },
+        AttractedTo = {
+            target = target,
+            radius = config.experience.attractRadius,
+            speed = config.experience.attractSpeed
+        },
+        Render = {
+            type = "circle",
+            radius = config.experience.size,
+            color = config.experience.color,
+            layer = 3
+        }
+    }
 end
 
 return entities

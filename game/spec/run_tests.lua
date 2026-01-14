@@ -159,7 +159,7 @@ end
 function TestEntities:testConfigIsExposed()
     lu.assertNotNil(entities.config)
     lu.assertNotNil(entities.config.player)
-    lu.assertNotNil(entities.config.enemy)
+    lu.assertNotNil(entities.config.enemies)
     lu.assertNotNil(entities.config.projectile)
 end
 

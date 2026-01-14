@@ -1,10 +1,19 @@
 -- Test helpers for Bounce Arena
 local helpers = {}
 
+-- Default config for tests (mirrors relevant parts of game config)
+local defaultConfig = {
+    knockback = {
+        speed = 400,
+        cooldown = 0.5
+    }
+}
+
 -- Mock tiny-ecs world for testing
-function helpers.createMockWorld(arena)
+function helpers.createMockWorld(arena, config)
     local world = {
         arena = arena or { x = 0, y = 0, width = 800, height = 600 },
+        config = config or defaultConfig,
         entities = {},
         removed = {}
     }
