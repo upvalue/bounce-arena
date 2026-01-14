@@ -1,27 +1,8 @@
+local config = require("config")
+
 local entities = {}
 
-local config = {
-    player = {
-        size = 15,
-        speed = 200,
-        maxHp = 10,
-        color = {0.2, 0.8, 0.2}
-    },
-    enemy = {
-        size = 12,
-        speed = 80,
-        damage = 1,
-        color = {0.9, 0.2, 0.2}
-    },
-    projectile = {
-        size = 5,
-        speed = 400,
-        lifetime = 5,
-        damage = 1,
-        color = {1, 0.8, 0.2}
-    }
-}
-
+-- Expose config for external access (e.g., tests)
 entities.config = config
 
 function entities.createPlayer(x, y)

@@ -1,4 +1,6 @@
 local tiny = require("lib.tiny")
+local input = require("input")
+local events = require("events")
 
 --[[
 Components (just table fields - documented here for reference):
@@ -31,10 +33,10 @@ systems.playerInput = tiny.processingSystem()
 systems.playerInput.filter = tiny.requireAll("x", "y", "PlayerInput")
 function systems.playerInput:process(e, dt)
     local dx, dy = 0, 0
-    if love.keyboard.isDown("w") or love.keyboard.isDown("up") then dy = -1 end
-    if love.keyboard.isDown("s") or love.keyboard.isDown("down") then dy = 1 end
-    if love.keyboard.isDown("a") or love.keyboard.isDown("left") then dx = -1 end
-    if love.keyboard.isDown("d") or love.keyboard.isDown("right") then dx = 1 end
+    if input.isDown("up") then dy = -1 end
+    if input.isDown("down") then dy = 1 end
+    if input.isDown("left") then dx = -1 end
+    if input.isDown("right") then dx = 1 end
 
     -- Normalize diagonal
     if dx ~= 0 and dy ~= 0 then
@@ -142,6 +144,9 @@ function systems.collision:update(dt)
     local player = self.player
     if not player then return end
 
+    -- Track entities to remove (avoid modifying lists while iterating)
+    local toRemove = {}
+
     -- Enemy-player collisions
     for i = #self.enemies, 1, -1 do
         local enemy = self.enemies[i]
@@ -151,31 +156,49 @@ function systems.collision:update(dt)
         local minDist = enemy.Collider.radius + player.Collider.radius
 
         if dist < minDist then
-            player.Health.current = player.Health.current - enemy.DamagesPlayer.amount
-            self.world:removeEntity(enemy)
+            -- Emit event instead of directly handling response
+            events.emit("collision", {
+                type = "enemy_hit_player",
+                enemy = enemy,
+                player = player,
+                damage = enemy.DamagesPlayer.amount
+            })
+            toRemove[enemy] = true
         end
     end
 
     -- Projectile-enemy collisions
     for pi = #self.projectiles, 1, -1 do
         local proj = self.projectiles[pi]
-        if proj then
+        if proj and not toRemove[proj] then
             for ei = #self.enemies, 1, -1 do
                 local enemy = self.enemies[ei]
-                if enemy then
+                if enemy and not toRemove[enemy] then
                     local dx = proj.x - enemy.x
                     local dy = proj.y - enemy.y
                     local dist = math.sqrt(dx * dx + dy * dy)
                     local minDist = proj.Collider.radius + enemy.Collider.radius
 
                     if dist < minDist then
-                        self.world:removeEntity(enemy)
-                        self.world:removeEntity(proj)
+                        -- Emit event instead of directly handling response
+                        events.emit("collision", {
+                            type = "projectile_hit_enemy",
+                            projectile = proj,
+                            enemy = enemy,
+                            damage = proj.DamagesEnemy.amount
+                        })
+                        toRemove[enemy] = true
+                        toRemove[proj] = true
                         break
                     end
                 end
             end
         end
+    end
+
+    -- Remove entities after iteration
+    for entity, _ in pairs(toRemove) do
+        self.world:removeEntity(entity)
     end
 end
 
@@ -212,7 +235,7 @@ systems.aimingLine.filter = tiny.requireAll("x", "y", "PlayerInput")
 systems.aimingLine.isDrawSystem = true
 function systems.aimingLine:process(e, dt)
     love.graphics.setColor(0.5, 0.5, 0.5, 0.5)
-    local mx, my = love.mouse.getPosition()
+    local mx, my = input.getMousePosition()
     love.graphics.line(e.x, e.y, mx, my)
 end
 
