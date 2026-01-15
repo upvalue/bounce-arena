@@ -11,7 +11,7 @@ config.music = {
 -- Debug/testing settings (set enabled = true to use)
 config.debug = {
     enabled = false,
-    startWave = 9,          -- skip to this wave (1 = normal start)
+    startWave = 12,          -- skip to this wave (1 = normal start)
     startSize = 119,         -- starting score/size
     startHealth = nil,      -- starting HP (nil = use maxHp)
     startMaxHealth = 10,    -- starting max HP (nil = use config.player.maxHp)
@@ -62,7 +62,8 @@ config.enemies = {
         health = 1,
         expValue = 2,
         movementDelay = 2,  -- seconds before starting to move
-        color = {1, 0.6, 0.2}  -- orange
+        color = {1, 0.6, 0.2},  -- orange
+        destroyedOnContact = true
     },
     xTurret = {
         size = 16,
@@ -109,6 +110,30 @@ config.enemies = {
         isTurret = true,
         isBallTurret = true
     },
+    yBallTurret = {
+        size = 18,
+        speed = 0,
+        damage = 0,
+        health = 4,
+        expValue = 4,
+        color = {1, 0.5, 0.2},  -- orange to match projectiles
+        fireRate = 2.5,
+        directions = {{0, 1}, {0, -1}},  -- down, up
+        isTurret = true,
+        isBallTurret = true
+    },
+    xyBallTurret = {
+        size = 18,
+        speed = 0,
+        damage = 0,
+        health = 4,
+        expValue = 4,
+        color = {1, 0.5, 0.2},  -- orange to match projectiles
+        fireRate = 2.5,
+        directions = {{0.707, 0.707}, {-0.707, 0.707}, {0.707, -0.707}, {-0.707, -0.707}},
+        isTurret = true,
+        isBallTurret = true
+    },
     carrier = {
         size = 20,
         speed = 40,              -- slow, flees player
@@ -143,6 +168,16 @@ config.enemies = {
         color = {0.4, 0.8, 1},   -- light blue
         travelDistance = 200,    -- ~1/3 arena width
         isFlapper = true
+    },
+    gunner = {
+        size = 14,
+        speed = 60,          -- slower than trooper to give player time to dodge shots
+        damage = 1,
+        health = 2,
+        expValue = 3,
+        color = {1, 0.6, 0.2},  -- orange
+        fireRate = 2.0,
+        isGunner = true
     }
 }
 
@@ -162,6 +197,15 @@ config.ballTurretProjectile = {
     lifetime = 8,
     damage = 1,
     color = {1, 0.5, 0.2}  -- orange
+}
+
+-- Gunner projectile settings (faster, bounces)
+config.gunnerProjectile = {
+    size = 5,
+    speed = 250,
+    lifetime = 4,
+    damage = 1,
+    color = {1, 0.6, 0.2}  -- orange like gunner
 }
 
 -- Visual effects
@@ -261,22 +305,26 @@ config.seasons = {
 -- Wave definitions: start time and enemy counts by type
 config.waves = {
     -- Level 1: Spring (waves 1-5)
+    -- { start = 0, fastTrooper = 1, season = "spring"},
     { start = 0,  trooper = 7, season = "spring" },
-   { start = 20, trooper = 10, toughTrooper = 1 },
-    --[[{ start = 40, trooper = 13, toughTrooper = 5 },
-    { start = 60, trooper = 16, toughTrooper = 7 },
-    { start = 80, trooper = 20, toughTrooper = 8 },
+    { start = 20, trooper = 10, toughTrooper = 1 },
+    { start = 40, trooper = 13, toughTrooper = 5, mine = 3 },
+    { start = 60, trooper = 16, toughTrooper = 7, flapper = 2},
 
-    -- Level 2: Summer (waves 6-9) - ability selection
-    { start = 100, trooper = 5, flapper = 2, season = "summer" },
-    { start = 120, trooper = 5, carrier = 2},
-    { start = 140, trooper = 10, carrier = 2, toughTrooper = 3},
-    { start = 160, trooper = 15, carrier = 2, toughTrooper = 3, flapper = 3},--]]
+    -- Level 2: Summer (waves 6-10) - ability selection
+    { start = 100, trooper = 5, carrier = 2, season = "summer" },
+    { start = 120, trooper = 5, carrier = 2, gunner = 2},
+    { start = 140, trooper = 10, carrier = 2, gunner = 2},
+    { start = 160, trooper = 15, carrier = 2, toughTrooper = 3, gunner = 2, mine = 2},
 
-    -- Level 3: Autumn (waves 10-4) - secondary weapon selection
+    -- Level 3: Autumn (waves 11-15) - secondary weapon selection
+    { start = 180, trooper = 10, xBallTurret = 2, season = "autumn"},
+    { start = 200, trooper = 14, toughTrooper = 6, yBallTurret = 2, carrier = 2},
+    { start = 220, trooper = 13, toughTrooper = 3, xBallTurret = 2, gunner = 3},
+    { start = 240, trooper = 15, toughTrooper = 3, xyBallTurret = 2, carrier = 2, gunner = 2},
 
-    -- Level 4: Winter - nothing yet
-    -- { start = 200, trooper = 1, season = "winter" },
+    -- Level 4: Winter (waves 16-20) - nothing yet
+    { start = 260, trooper = 15, toughTrooper = 2, xyBallTurret = 3, gunner = 2, carrier = 2, mine = 1, flapper = 2, season = "winter" },
 }
 
 --[[config.waves = {
@@ -320,8 +368,8 @@ config.experience = {
 config.levelUp = {
     sizePerLevel = 40,
     speedMultiplier = 1.1,  -- 10% speed increase
-    healAmount = 8,         -- HP restored by heal option
-    maxHpIncrease = 5       -- max HP added (no heal)
+    healAmount = 5,         -- HP restored by heal option
+    maxHpIncrease = 3       -- max HP added (no heal)
 }
 
 return config

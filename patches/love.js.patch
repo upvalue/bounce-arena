@@ -1,0 +1,30 @@
+diff --git a/index.js b/index.js
+index 1477412a1936a0191acc262f67392ee1341d31ac..4020955d2f92c39c8d93ad8df0683a05af7f795d 100644
+--- a/index.js
++++ b/index.js
+@@ -12,6 +12,7 @@ commander
+   .option('-t, --title <string>', 'specify game name')
+   .option('-m, --memory [bytes]', 'how much memory your game will require [16777216]', 16777216)
+   .option('-c, --compatibility', 'specify flag to use compatibility version')
++  .option('-T, --template <path>', 'custom HTML template path')
+   .arguments('<input> <output>')
+   .action((input, output) => {
+     commander.input = input;
+@@ -42,6 +43,7 @@ const getAdditionalInfo = async function getAdditionalInfo(parsedArgs) {
+     input: parsedArgs.input,
+     output: parsedArgs.output,
+     compat: parsedArgs.compatibility,
++    template: parsedArgs.template,
+   };
+   args.input = parsedArgs.input || await prompt('Love file or directory: ');
+   args.output = parsedArgs.output || await prompt('Output directory: ');
+@@ -128,7 +130,8 @@ getAdditionalInfo(commander).then((args) => {
+   const fldr_name = args.compat ? "compat" : "release";
+ 
+   {
+-    const template = fs.readFileSync(`${srcDir}/${fldr_name}/index.html`, 'utf8');
++    const templatePath = args.template ? resolve(args.template) : `${srcDir}/${fldr_name}/index.html`;
++    const template = fs.readFileSync(templatePath, 'utf8');
+     const renderedTemplate = mustache.render(template, args);
+ 
+     fs.mkdirsSync(outputDir);

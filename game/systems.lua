@@ -1,6 +1,7 @@
 local tiny = require("lib.tiny")
 local input = require("input")
 local events = require("events")
+local graphics = require("graphics")
 
 --[[
 Components (just table fields - documented here for reference):
@@ -289,6 +290,28 @@ function systems.shooting:process(e, dt)
             else
                 proj = entities.createEnemyProjectile(e.x, e.y, dir[1], dir[2])
             end
+            self.world:addEntity(proj)
+        end
+        shooter.fireTimer = shooter.fireRate
+    end
+end
+
+-- Gunner shooting system: fires projectiles toward player
+systems.gunnerShooting = tiny.processingSystem()
+systems.gunnerShooting.filter = tiny.requireAll("x", "y", "GunnerShooter")
+function systems.gunnerShooting:process(e, dt)
+    local shooter = e.GunnerShooter
+    shooter.fireTimer = shooter.fireTimer - dt
+
+    if shooter.fireTimer <= 0 and shooter.target then
+        local dx = shooter.target.x - e.x
+        local dy = shooter.target.y - e.y
+        local dist = math.sqrt(dx * dx + dy * dy)
+
+        if dist > 0 then
+            local dirX = dx / dist
+            local dirY = dy / dist
+            local proj = entities.createGunnerProjectile(e.x, e.y, dirX, dirY)
             self.world:addEntity(proj)
         end
         shooter.fireTimer = shooter.fireRate
@@ -662,16 +685,19 @@ function systems.collision:update(dt)
         end
     end
 
-    -- Enemy projectile-player collisions (turret shots, skip if invulnerable)
+    -- Enemy projectile-player collisions (turret shots)
     for i = #self.enemyProjectiles, 1, -1 do
         local proj = self.enemyProjectiles[i]
-        if proj and not toRemove[proj] and not player.Invulnerable and collides(proj, player) then
-            events.emit("collision", {
-                type = "enemy_projectile_hit_player",
-                projectile = proj,
-                player = player,
-                damage = proj.DamagesPlayer.amount
-            })
+        if proj and not toRemove[proj] and collides(proj, player) then
+            -- Always destroy projectile on collision, but only damage if not invulnerable
+            if not player.Invulnerable then
+                events.emit("collision", {
+                    type = "enemy_projectile_hit_player",
+                    projectile = proj,
+                    player = player,
+                    damage = proj.DamagesPlayer.amount
+                })
+            end
             toRemove[proj] = true
         end
     end
@@ -726,35 +752,25 @@ function systems.render:process(e, dt)
 
     love.graphics.setColor(color[1], color[2], color[3], color[4] or 1)
 
-    if r.type == "circle" then
+    if r.type == "vector" then
+        graphics.drawCircle(e.x, e.y, r.radius, color, r.style, {
+            glowRings = r.glowRings,
+            time = love.timer.getTime(),
+            variant = r.variant
+        })
+    elseif r.type == "sparkle" then
+        graphics.drawSparkle(e.x, e.y, r.radius, color, love.timer.getTime())
+    elseif r.type == "circle" then
         love.graphics.circle("fill", e.x, e.y, r.radius)
     elseif r.type == "rectangle" then
         love.graphics.rectangle("fill", e.x - r.width/2, e.y - r.height/2, r.width, r.height)
     elseif r.type == "turret" then
-        -- Draw center circle
-        love.graphics.circle("fill", e.x, e.y, r.radius)
-        -- Draw direction lines
-        love.graphics.setLineWidth(2)
-        for _, dir in ipairs(r.directions) do
-            local endX = e.x + dir[1] * r.lineLength
-            local endY = e.y + dir[2] * r.lineLength
-            love.graphics.line(e.x, e.y, endX, endY)
-        end
-        love.graphics.setLineWidth(1)
+        graphics.drawTurret(e.x, e.y, r.radius, color, r.directions, r.lineLength, love.timer.getTime())
     elseif r.type == "oval" then
-        love.graphics.ellipse("fill", e.x, e.y, r.width / 2, r.height / 2)
+        graphics.drawOval(e.x, e.y, r.width, r.height, color, love.timer.getTime())
     elseif r.type == "mine" then
-        -- Draw blast radius indicator only when triggered
-        if e.MineDetonator and e.MineDetonator.triggered then
-            love.graphics.setColor(color[1], color[2], color[3], 0.15)
-            love.graphics.circle("fill", e.x, e.y, r.blastRadius)
-            love.graphics.setColor(color[1], color[2], color[3], 0.3)
-            love.graphics.setLineWidth(1)
-            love.graphics.circle("line", e.x, e.y, r.blastRadius)
-        end
-        -- Draw mine body
-        love.graphics.setColor(color[1], color[2], color[3], color[4] or 1)
-        love.graphics.circle("fill", e.x, e.y, r.radius)
+        local triggered = e.MineDetonator and e.MineDetonator.triggered
+        graphics.drawMine(e.x, e.y, r.radius, r.blastRadius, color, triggered, love.timer.getTime())
     elseif r.type == "sniper" then
         -- Draw rotated rectangle for sniper shot
         love.graphics.push()

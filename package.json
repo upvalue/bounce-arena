@@ -8,11 +8,19 @@
     "serve": "pnpm build && npx serve dist",
     "clean": "rm -rf dist"
   },
-  "keywords": ["love2d", "game"],
+  "keywords": [
+    "love2d",
+    "game"
+  ],
   "author": "",
   "license": "ISC",
   "devDependencies": {
     "love.js": "^11.4.1",
     "serve": "^14.2.4"
+  },
+  "pnpm": {
+    "patchedDependencies": {
+      "love.js": "patches/love.js.patch"
+    }
   }
 }

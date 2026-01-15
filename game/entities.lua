@@ -16,7 +16,7 @@ function entities.createPlayer(x, y)
         PlayerInput = { speed = config.player.speed },
         ArenaClamp = { margin = config.player.size },
         Render = {
-            type = "circle",
+            type = "vector",
             radius = config.player.size,
             color = config.player.color,
             layer = 10
@@ -38,7 +38,7 @@ function entities.createEnemy(x, y, target, enemyType, options)
         DamagesPlayer = { amount = enemyType.damage },
         expValue = enemyType.expValue or 1,
         Render = {
-            type = "circle",
+            type = "vector",
             radius = enemyType.size,
             color = enemyType.color,
             layer = 5
@@ -74,7 +74,7 @@ function entities.createProjectile(x, y, dirX, dirY)
         Lifetime = { remaining = config.projectile.lifetime },
         DamagesEnemy = { amount = config.projectile.damage },
         Render = {
-            type = "circle",
+            type = "vector",
             radius = config.projectile.size,
             color = config.projectile.color,
             layer = 8
@@ -151,7 +151,7 @@ function entities.createExperience(x, y, target, value)
             speed = config.experience.attractSpeed
         },
         Render = {
-            type = "circle",
+            type = "sparkle",
             radius = config.experience.size,
             color = config.experience.color,
             layer = 3
@@ -203,7 +203,7 @@ function entities.createEnemyProjectile(x, y, dirX, dirY)
         DamagesPlayer = { amount = cfg.damage },
         EnemyProjectile = true,  -- flag to skip enemy collisions
         Render = {
-            type = "circle",
+            type = "vector",
             radius = cfg.size,
             color = cfg.color,
             layer = 7
@@ -225,10 +225,31 @@ function entities.createBallTurretProjectile(x, y, dirX, dirY)
         DamagesPlayer = { amount = cfg.damage },
         Lifetime = { remaining = cfg.lifetime },
         Render = {
-            type = "circle",
+            type = "vector",
             radius = cfg.size,
             color = cfg.color,
             layer = 9
+        }
+    }
+end
+
+function entities.createGunnerProjectile(x, y, dirX, dirY)
+    local cfg = config.gunnerProjectile
+    return {
+        x = x,
+        y = y,
+        vx = dirX * cfg.speed,
+        vy = dirY * cfg.speed,
+        Collider = { radius = cfg.size },
+        Bounces = {},                    -- bounces off arena walls
+        EnemyProjectile = true,          -- marker for enemy projectile
+        DamagesPlayer = { amount = cfg.damage },
+        Lifetime = { remaining = cfg.lifetime },
+        Render = {
+            type = "vector",
+            radius = cfg.size,
+            color = cfg.color,
+            layer = 7
         }
     }
 end
@@ -407,7 +428,7 @@ function entities.createFlapper(x, y, axis)
         DamagesPlayer = { amount = cfg.damage },
         expValue = cfg.expValue,
         Render = {
-            type = "circle",
+            type = "vector",
             radius = cfg.size,
             color = cfg.color,
             layer = 5
@@ -445,6 +466,73 @@ function entities.spawnFlapperAtEdge(arena, rng)
     return entities.createFlapper(x, y, axis)
 end
 
+function entities.createGunner(x, y, target)
+    local cfg = config.enemies.gunner
+    return {
+        x = x,
+        y = y,
+        vx = 0,
+        vy = 0,
+        Health = { current = cfg.health, max = cfg.health },
+        Collider = { radius = cfg.size },
+        SeeksTarget = { target = target, speed = cfg.speed },
+        GunnerShooter = {
+            fireRate = cfg.fireRate,
+            fireTimer = cfg.fireRate,
+            target = target
+        },
+        DamagesPlayer = { amount = cfg.damage },
+        expValue = cfg.expValue,
+        Render = {
+            type = "vector",
+            radius = cfg.size,
+            color = cfg.color,
+            layer = 5
+        }
+    }
+end
+
+function entities.spawnGunnerAtEdge(arena, target, rng)
+    rng = rng or math.random
+    local cfg = config.enemies.gunner
+    local margin = cfg.size
+    local safeRadius = config.spawn.safeRadius
+
+    for attempt = 1, 10 do
+        local side = rng(1, 4)
+        local x, y
+
+        if side == 1 then
+            x = arena.x + rng() * arena.width
+            y = arena.y + margin
+        elseif side == 2 then
+            x = arena.x + rng() * arena.width
+            y = arena.y + arena.height - margin
+        elseif side == 3 then
+            x = arena.x + margin
+            y = arena.y + rng() * arena.height
+        else
+            x = arena.x + arena.width - margin
+            y = arena.y + rng() * arena.height
+        end
+
+        if target then
+            local dx = x - target.x
+            local dy = y - target.y
+            local dist = math.sqrt(dx * dx + dy * dy)
+            if dist >= safeRadius then
+                return entities.createGunner(x, y, target)
+            end
+        else
+            return entities.createGunner(x, y, target)
+        end
+    end
+
+    local x = arena.x + arena.width / 2
+    local y = arena.y + margin
+    return entities.createGunner(x, y, target)
+end
+
 function entities.createAoeEffect(x, y, radius)
     local cfg = config.effects.aoeExplosion
     return {
@@ -479,7 +567,7 @@ function entities.createBomb(x, y)
             damage = cfg.aoeDamage
         },
         Render = {
-            type = "circle",
+            type = "vector",
             radius = cfg.size,
             color = {cfg.color[1], cfg.color[2], cfg.color[3]},
             layer = 6
@@ -511,7 +599,7 @@ function entities.createMissile(x, y, dirX, dirY)
         },
         DamagesEnemy = { amount = cfg.aoeDamage },
         Render = {
-            type = "circle",
+            type = "vector",
             radius = cfg.size,
             color = {cfg.color[1], cfg.color[2], cfg.color[3]},
             layer = 8

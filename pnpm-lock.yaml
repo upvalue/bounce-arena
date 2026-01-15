@@ -4,13 +4,18 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
+patchedDependencies:
+  love.js:
+    hash: muqzyhkl7ope4kx4ulwai6n7bu
+    path: patches/love.js.patch
+
 importers:
 
   .:
     devDependencies:
       love.js:
         specifier: ^11.4.1
-        version: 11.4.1
+        version: 11.4.1(patch_hash=muqzyhkl7ope4kx4ulwai6n7bu)
       serve:
         specifier: ^14.2.4
         version: 14.2.5
@@ -546,7 +551,7 @@ snapshots:
     optionalDependencies:
       graceful-fs: 4.2.11
 
-  love.js@11.4.1:
+  love.js@11.4.1(patch_hash=muqzyhkl7ope4kx4ulwai6n7bu):
     dependencies:
       commander: 2.20.3
       fs-extra: 3.0.1

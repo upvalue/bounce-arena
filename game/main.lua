@@ -57,7 +57,7 @@ local secondaryDescriptions = {
 -- Available level up upgrades (heal is always slot 1)
 local upgrades = {
     heal = {
-        label = "Heal +8 HP",
+        label = "Heal +"..config.levelUp.healAmount.." HP",
         apply = function(p)
             p.Health.current = math.min(p.Health.current + config.levelUp.healAmount, p.Health.max)
         end
@@ -69,7 +69,7 @@ local upgrades = {
         end
     },
     maxHp = {
-        label = "Max HP +5",
+        label = "Max HP +"..config.levelUp.maxHpIncrease,
         apply = function(p)
             p.Health.max = p.Health.max + config.levelUp.maxHpIncrease
         end
@@ -163,6 +163,8 @@ local function spawnWave(waveConfig)
                         enemy = entities.spawnMineAtEdge(arena, player, nil)
                     elseif enemyType.isFlapper then
                         enemy = entities.spawnFlapperAtEdge(arena, nil)
+                    elseif enemyType.isGunner then
+                        enemy = entities.spawnGunnerAtEdge(arena, player, nil)
                     else
                         enemy = entities.spawnEnemyAtEdge(arena, player, nil, enemyType)
                     end
@@ -202,7 +204,7 @@ local function startGame()
         systems.fleeing, systems.spawner, systems.mineDetector, systems.oscillation,
         systems.freeze, systems.attraction, systems.movement, systems.bounce,
         systems.arenaClamp, systems.lifetime, systems.fade, systems.damageCooldown,
-        systems.invulnerability, systems.shooting, systems.flash,
+        systems.invulnerability, systems.shooting, systems.gunnerShooting, systems.flash,
         systems.bombTimer, systems.collision, systems.render, systems.aimingLine, systems.hud
     }
     for _, sys in ipairs(allSystems) do
@@ -792,10 +794,17 @@ function love.draw()
     -- Season name for HUD
     local seasonName = config.seasons[currentSeason].name
 
-    local hud = string.format("%s   Time: %s   Wave: %d/%d   Level: %d   Size: %d   HP: %d/%d   Ammo: %d/%d%s%s%s",
-        seasonName, timeStr, currentWave, #config.waves, playerLevel, score, player.Health.current, player.Health.max,
-        config.projectile.maxCount - projectilesActive, config.projectile.maxCount, secondaryStr, abilityStr, nextWaveStr)
-    love.graphics.print(hud, 10, 10)
+    -- Line 1: Game state
+    local gameState = string.format("%s   Wave: %d/%d   Time: %s%s",
+        seasonName, currentWave, #config.waves, timeStr, nextWaveStr)
+    love.graphics.print(gameState, 10, 10)
+
+    -- Line 2: Player stats
+    local playerStats = string.format("HP: %d/%d   Ammo: %d/%d%s%s",
+        player.Health.current, player.Health.max,
+        config.projectile.maxCount - projectilesActive, config.projectile.maxCount,
+        secondaryStr, abilityStr)
+    love.graphics.print(playerStats, 10, 26)
 
     -- Run draw systems
     world:update(0, function(_, system)
