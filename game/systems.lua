@@ -218,6 +218,26 @@ function systems.lifetime:process(e, dt)
     end
 end
 
+-- Boundary sanity check: removes entities that are way off screen
+-- Prevents entities from getting lost due to bugs or edge cases
+systems.boundaryCheck = tiny.processingSystem()
+systems.boundaryCheck.filter = tiny.requireAll("x", "y")
+function systems.boundaryCheck:onAddToWorld(world)
+    self.arena = world.arena
+end
+function systems.boundaryCheck:process(e, dt)
+    -- Don't remove the player
+    if e.PlayerInput then return end
+
+    local arena = self.arena
+    local margin = 200  -- entities can be this far outside arena before removal
+
+    if e.x < arena.x - margin or e.x > arena.x + arena.width + margin or
+       e.y < arena.y - margin or e.y > arena.y + arena.height + margin then
+        self.world:removeEntity(e)
+    end
+end
+
 -- Fade system: updates render alpha based on lifetime for fading entities
 systems.fade = tiny.processingSystem()
 systems.fade.filter = tiny.requireAll("Lifetime", "FadesOut", "Render")

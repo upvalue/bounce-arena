@@ -203,7 +203,7 @@ local function startGame()
         systems.playerInput, systems.movementDelay, systems.seeking,
         systems.fleeing, systems.spawner, systems.mineDetector, systems.oscillation,
         systems.freeze, systems.attraction, systems.movement, systems.bounce,
-        systems.arenaClamp, systems.lifetime, systems.fade, systems.damageCooldown,
+        systems.arenaClamp, systems.lifetime, systems.boundaryCheck, systems.fade, systems.damageCooldown,
         systems.invulnerability, systems.shooting, systems.gunnerShooting, systems.flash,
         systems.bombTimer, systems.collision, systems.render, systems.aimingLine, systems.hud
     }
@@ -636,7 +636,8 @@ function love.update(dt)
     if player and player.Ability and player.Ability.active then
         local cfg = config.abilities.shield
         for _, entity in ipairs(world.entities) do
-            if entity.EnemyProjectile or (entity.DamagesPlayer and entity.vx) then
+            -- Only repel actual projectiles, not mines or other enemies
+            if entity.EnemyProjectile or entity.BallTurretProjectile then
                 local dx = entity.x - player.x
                 local dy = entity.y - player.y
                 local dist = math.sqrt(dx * dx + dy * dy)
