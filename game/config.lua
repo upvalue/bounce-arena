@@ -2,6 +2,15 @@
 -- All game settings in one place for easy tuning and testing
 
 local config = {}
+-- Debug/testing settings (set enabled = true to use)
+config.debug = {
+    enabled = true,
+    startWave = 9,          -- skip to this wave (1 = normal start)
+    startSize = 119,         -- starting score/size
+    startHealth = nil,      -- starting HP (nil = use maxHp)
+    startMaxHealth = 10,    -- starting max HP (nil = use config.player.maxHp)
+    speedMultiplier = 1,   -- multiply player speed
+}
 
 -- Arena bounds
 config.arena = {
@@ -15,7 +24,7 @@ config.arena = {
 config.player = {
     size = 15,
     speed = 300,
-    maxHp = 15,
+    maxHp = 12,
     color = {0.3, 0.5, 1}
 }
 
@@ -78,6 +87,41 @@ config.enemies = {
         fireRate = 2.0,
         directions = {{0.707, 0.707}, {-0.707, 0.707}, {0.707, -0.707}, {-0.707, -0.707}},
         isTurret = true
+    },
+    carrier = {
+        size = 20,
+        speed = 40,              -- slow, flees player
+        wanderSpeed = 15,        -- slower random movement when player is far
+        fleeRadius = 150,        -- start fleeing when player is within this distance
+        damage = 1,
+        health = 3,
+        expValue = 5,
+        color = {1, 0.6, 0.8},   -- pink
+        spawnInterval = 5,       -- spawn fastTrooper every 5s
+        isCarrier = true
+    },
+    mine = {
+        size = 12,
+        speed = 0,
+        damage = 0,
+        health = 2,
+        expValue = 3,
+        color = {0.5, 0.5, 0.5}, -- gray
+        detonationRange = 80,    -- triggers when player this close
+        aoeDamage = 3,
+        aoeRadius = 100,
+        fuseTime = 1.5,          -- time from trigger to explosion
+        isMine = true
+    },
+    flapper = {
+        size = 10,
+        speed = 120,
+        damage = 1,
+        health = 1,
+        expValue = 2,
+        color = {0.4, 0.8, 1},   -- light blue
+        travelDistance = 200,    -- ~1/3 arena width
+        isFlapper = true
     }
 }
 
@@ -151,6 +195,9 @@ config.waves = {
 
     -- { start = 100, trooper = 20, toughTrooper = 8 },
 
+    -- debug stage
+    { start = 160, flapper = 3},
+
 
 }
 
@@ -161,12 +208,12 @@ config.experience = {
     color = {0.3, 0.5, 1},  -- blue
     attractRadius = 150,
     attractSpeed = 200,
-    growthAmount = 0.04
+    growthAmount = 0.05
 }
 
 -- Level up settings
 config.levelUp = {
-    sizePerLevel = 50,
+    sizePerLevel = 40,
     speedMultiplier = 1.1,  -- 10% speed increase
     healAmount = 8,         -- HP restored by heal option
     maxHpIncrease = 5       -- max HP added (no heal)

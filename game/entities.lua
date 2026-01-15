@@ -24,8 +24,9 @@ function entities.createPlayer(x, y)
     }
 end
 
-function entities.createEnemy(x, y, target, enemyType)
+function entities.createEnemy(x, y, target, enemyType, options)
     enemyType = enemyType or config.enemies.trooper
+    options = options or {}
     local enemy = {
         x = x,
         y = y,
@@ -43,8 +44,8 @@ function entities.createEnemy(x, y, target, enemyType)
             layer = 5
         }
     }
-    -- Add movement delay if configured
-    if enemyType.movementDelay then
+    -- Add movement delay if configured (unless explicitly skipped)
+    if enemyType.movementDelay and not options.skipMovementDelay then
         enemy.MovementDelay = { remaining = enemyType.movementDelay }
     end
     return enemy
@@ -225,6 +226,191 @@ function entities.spawnTurretAtEdge(arena, rng, turretType)
     end
 
     return entities.createTurret(x, y, turretType)
+end
+
+function entities.createCarrier(x, y, target)
+    local cfg = config.enemies.carrier
+    return {
+        x = x,
+        y = y,
+        vx = 0,
+        vy = 0,
+        Health = { current = cfg.health, max = cfg.health },
+        Collider = { radius = cfg.size },
+        FleesTarget = {
+            target = target,
+            speed = cfg.speed,
+            wanderSpeed = cfg.wanderSpeed,
+            fleeRadius = cfg.fleeRadius
+        },
+        Bounces = {},  -- bounce off walls while fleeing
+        Spawner = { timer = cfg.spawnInterval, interval = cfg.spawnInterval, target = target },
+        DamagesPlayer = { amount = cfg.damage },
+        expValue = cfg.expValue,
+        Render = {
+            type = "oval",
+            width = cfg.size * 2.5,
+            height = cfg.size * 1.5,
+            color = cfg.color,
+            layer = 5
+        }
+    }
+end
+
+function entities.spawnCarrierAtEdge(arena, target, rng)
+    rng = rng or math.random
+    local cfg = config.enemies.carrier
+    local margin = cfg.size
+    local safeRadius = config.spawn.safeRadius
+
+    for attempt = 1, 10 do
+        local side = rng(1, 4)
+        local x, y
+
+        if side == 1 then
+            x = arena.x + rng() * arena.width
+            y = arena.y + margin
+        elseif side == 2 then
+            x = arena.x + rng() * arena.width
+            y = arena.y + arena.height - margin
+        elseif side == 3 then
+            x = arena.x + margin
+            y = arena.y + rng() * arena.height
+        else
+            x = arena.x + arena.width - margin
+            y = arena.y + rng() * arena.height
+        end
+
+        if target then
+            local dx = x - target.x
+            local dy = y - target.y
+            local dist = math.sqrt(dx * dx + dy * dy)
+            if dist >= safeRadius then
+                return entities.createCarrier(x, y, target)
+            end
+        else
+            return entities.createCarrier(x, y, target)
+        end
+    end
+
+    -- Fallback
+    local x = arena.x + arena.width / 2
+    local y = arena.y + margin
+    return entities.createCarrier(x, y, target)
+end
+
+function entities.createMine(x, y, player)
+    local cfg = config.enemies.mine
+    return {
+        x = x,
+        y = y,
+        vx = 0,
+        vy = 0,
+        Health = { current = cfg.health, max = cfg.health },
+        Collider = { radius = cfg.size },
+        MineDetonator = {
+            player = player,
+            detonationRange = cfg.detonationRange,
+            aoeDamage = cfg.aoeDamage,
+            aoeRadius = cfg.aoeRadius,
+            fuseTime = cfg.fuseTime,
+            triggered = false,
+            fuseTimer = 0,
+            flashTimer = 0
+        },
+        DamagesPlayer = { amount = 0 },  -- for collision tracking
+        expValue = cfg.expValue,
+        Render = {
+            type = "circle",
+            radius = cfg.size,
+            color = cfg.color,
+            layer = 5
+        }
+    }
+end
+
+function entities.spawnMineAtEdge(arena, player, rng)
+    rng = rng or math.random
+    local cfg = config.enemies.mine
+    -- Spawn mines away from edges (like turrets)
+    local margin = 50 + cfg.size
+
+    local side = rng(1, 4)
+    local x, y
+
+    if side == 1 then
+        x = arena.x + margin + rng() * (arena.width - margin * 2)
+        y = arena.y + margin
+    elseif side == 2 then
+        x = arena.x + margin + rng() * (arena.width - margin * 2)
+        y = arena.y + arena.height - margin
+    elseif side == 3 then
+        x = arena.x + margin
+        y = arena.y + margin + rng() * (arena.height - margin * 2)
+    else
+        x = arena.x + arena.width - margin
+        y = arena.y + margin + rng() * (arena.height - margin * 2)
+    end
+
+    return entities.createMine(x, y, player)
+end
+
+function entities.createFlapper(x, y, axis)
+    local cfg = config.enemies.flapper
+    return {
+        x = x,
+        y = y,
+        vx = 0,
+        vy = 0,
+        Health = { current = cfg.health, max = cfg.health },
+        Collider = { radius = cfg.size },
+        Oscillator = {
+            axis = axis or "horizontal",
+            direction = 1,
+            speed = cfg.speed,
+            distance = cfg.travelDistance,
+            traveled = 0
+        },
+        ArenaClamp = { margin = cfg.size },
+        DamagesPlayer = { amount = cfg.damage },
+        expValue = cfg.expValue,
+        Render = {
+            type = "circle",
+            radius = cfg.size,
+            color = cfg.color,
+            layer = 5
+        }
+    }
+end
+
+function entities.spawnFlapperAtEdge(arena, rng)
+    rng = rng or math.random
+    local cfg = config.enemies.flapper
+    local margin = cfg.size
+    local axis = rng(1, 2) == 1 and "horizontal" or "vertical"
+
+    local x, y
+    if axis == "horizontal" then
+        -- Spawn on left or right edge
+        local side = rng(1, 2)
+        if side == 1 then
+            x = arena.x + margin
+        else
+            x = arena.x + arena.width - margin
+        end
+        y = arena.y + margin + rng() * (arena.height - margin * 2)
+    else
+        -- Spawn on top or bottom edge
+        local side = rng(1, 2)
+        x = arena.x + margin + rng() * (arena.width - margin * 2)
+        if side == 1 then
+            y = arena.y + margin
+        else
+            y = arena.y + arena.height - margin
+        end
+    end
+
+    return entities.createFlapper(x, y, axis)
 end
 
 return entities

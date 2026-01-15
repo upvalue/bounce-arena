@@ -80,6 +80,62 @@ function systems.seeking:process(e, dt)
     end
 end
 
+-- Fleeing system: moves away from target (for Carrier)
+-- Wanders randomly when player is far, flees when player is close
+systems.fleeing = tiny.processingSystem()
+systems.fleeing.filter = tiny.requireAll("x", "y", "vx", "vy", "FleesTarget")
+function systems.fleeing:process(e, dt)
+    local flee = e.FleesTarget
+    local target = flee.target
+    if not target then return end
+
+    local dx = target.x - e.x
+    local dy = target.y - e.y
+    local dist = math.sqrt(dx * dx + dy * dy)
+
+    local fleeRadius = flee.fleeRadius or 150
+    local wanderSpeed = flee.wanderSpeed or 15
+
+    if dist < fleeRadius and dist > 0 then
+        -- Player is close - flee!
+        e.vx = -(dx / dist) * flee.speed
+        e.vy = -(dy / dist) * flee.speed
+    else
+        -- Player is far - wander randomly
+        flee.wanderTimer = (flee.wanderTimer or 0) - dt
+        if flee.wanderTimer <= 0 then
+            -- Pick new random direction every 1-3 seconds
+            local angle = math.random() * math.pi * 2
+            flee.wanderDirX = math.cos(angle)
+            flee.wanderDirY = math.sin(angle)
+            flee.wanderTimer = 1 + math.random() * 2
+        end
+        e.vx = (flee.wanderDirX or 0) * wanderSpeed
+        e.vy = (flee.wanderDirY or 0) * wanderSpeed
+    end
+end
+
+-- Oscillation system: moves back and forth (for Flapper)
+systems.oscillation = tiny.processingSystem()
+systems.oscillation.filter = tiny.requireAll("x", "y", "vx", "vy", "Oscillator")
+function systems.oscillation:process(e, dt)
+    local osc = e.Oscillator
+    osc.traveled = osc.traveled + math.abs(osc.speed) * dt
+
+    if osc.traveled >= osc.distance then
+        osc.direction = -osc.direction
+        osc.traveled = 0
+    end
+
+    if osc.axis == "horizontal" then
+        e.vx = osc.direction * osc.speed
+        e.vy = 0
+    else
+        e.vx = 0
+        e.vy = osc.direction * osc.speed
+    end
+end
+
 -- Attraction system: moves toward target when within radius
 systems.attraction = tiny.processingSystem()
 systems.attraction.filter = tiny.requireAll("x", "y", "AttractedTo")
@@ -185,6 +241,7 @@ end
 
 -- Shooting system: handles turrets firing projectiles
 local entities = require("entities")
+local config = require("config")
 systems.shooting = tiny.processingSystem()
 systems.shooting.filter = tiny.requireAll("x", "y", "Shooter")
 function systems.shooting:process(e, dt)
@@ -198,6 +255,62 @@ function systems.shooting:process(e, dt)
             self.world:addEntity(proj)
         end
         shooter.fireTimer = shooter.fireRate
+    end
+end
+
+-- Spawner system: spawns child enemies (for Carrier)
+systems.spawner = tiny.processingSystem()
+systems.spawner.filter = tiny.requireAll("x", "y", "Spawner")
+function systems.spawner:process(e, dt)
+    local spawner = e.Spawner
+    spawner.timer = spawner.timer - dt
+
+    if spawner.timer <= 0 then
+        local child = entities.createEnemy(e.x, e.y, spawner.target, config.enemies.fastTrooper)
+        self.world:addEntity(child)
+        spawner.timer = spawner.interval
+        events.emit("enemy_spawned", { enemy = child })
+    end
+end
+
+-- Mine detector system: handles mine proximity detection and detonation
+systems.mineDetector = tiny.processingSystem()
+systems.mineDetector.filter = tiny.requireAll("x", "y", "MineDetonator")
+function systems.mineDetector:process(e, dt)
+    local det = e.MineDetonator
+    local player = det.player
+    if not player then return end
+
+    local dx = player.x - e.x
+    local dy = player.y - e.y
+    local dist = math.sqrt(dx * dx + dy * dy)
+
+    if det.triggered then
+        -- Countdown to explosion with flashing
+        det.fuseTimer = det.fuseTimer - dt
+        det.flashTimer = det.flashTimer - dt
+        if det.flashTimer <= 0 then
+            e.Flash = { remaining = 0.1, color = {1, 0, 0} }
+            det.flashTimer = 0.15  -- fast flashing
+            self.world:addEntity(e)
+        end
+        if det.fuseTimer <= 0 then
+            -- Explode - deal AOE damage if player in range
+            if dist < det.aoeRadius and not player.Invulnerable then
+                events.emit("collision", {
+                    type = "mine_exploded",
+                    mine = e,
+                    player = player,
+                    damage = det.aoeDamage
+                })
+            end
+            events.emit("mine_removed", { mine = e })
+            self.world:removeEntity(e)
+        end
+    elseif dist < det.detonationRange then
+        det.triggered = true
+        det.fuseTimer = det.fuseTime
+        det.flashTimer = 0
     end
 end
 
@@ -447,6 +560,8 @@ function systems.render:process(e, dt)
             love.graphics.line(e.x, e.y, endX, endY)
         end
         love.graphics.setLineWidth(1)
+    elseif r.type == "oval" then
+        love.graphics.ellipse("fill", e.x, e.y, r.width / 2, r.height / 2)
     end
 end
 

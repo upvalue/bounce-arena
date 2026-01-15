@@ -17,6 +17,51 @@ local projectilesActive = 0
 local enemiesClearedTime = nil  -- for adaptive wave mode
 local playerLevel = 0
 local pendingLevelUp = false  -- true when waiting for player to choose upgrade
+local levelUpChoices = {}     -- random choices for current level up
+local gameLog = {}  -- event log for end game screen
+
+-- Available level up upgrades (heal is always slot 1)
+local upgrades = {
+    heal = {
+        label = "Heal +8 HP",
+        apply = function(p)
+            p.Health.current = math.min(p.Health.current + config.levelUp.healAmount, p.Health.max)
+        end
+    },
+    speed = {
+        label = "Speed Boost (+10%)",
+        apply = function(p)
+            p.PlayerInput.speed = p.PlayerInput.speed * config.levelUp.speedMultiplier
+        end
+    },
+    maxHp = {
+        label = "Max HP +5",
+        apply = function(p)
+            p.Health.max = p.Health.max + config.levelUp.maxHpIncrease
+        end
+    },
+    invuln = {
+        label = "Invulnerability (12s)",
+        apply = function(p, w)
+            p.Invulnerable = { remaining = 12, flashTimer = 0 }
+            w:addEntity(p)
+        end
+    }
+}
+
+-- Pick random upgrades for slots 2 and 3
+local function pickLevelUpChoices()
+    local pool = {"speed", "maxHp", "invuln"}
+    -- Shuffle and pick 2
+    local i = math.random(1, 3)
+    local j = math.random(1, 2)
+    if j >= i then j = j + 1 end
+    levelUpChoices = {
+        "heal",     -- always slot 1
+        pool[i],    -- random slot 2
+        pool[j]     -- random slot 3
+    }
+end
 
 -- Fonts
 local titleFont
@@ -28,9 +73,20 @@ local gameFont
 local world
 local player
 
+local function formatTime(seconds)
+    local m = math.floor(seconds / 60)
+    local s = math.floor(seconds % 60)
+    return string.format("%d:%02d", m, s)
+end
+
+local function logEvent(message)
+    table.insert(gameLog, formatTime(gameTime) .. " - " .. message)
+end
+
 local function spawnWave(waveConfig)
     local arena = config.arena
     currentWave = currentWave + 1
+    logEvent("Wave " .. currentWave .. " started")
 
     -- Spawn each enemy type
     for typeName, count in pairs(waveConfig) do
@@ -41,6 +97,12 @@ local function spawnWave(waveConfig)
                     local enemy
                     if enemyType.isTurret then
                         enemy = entities.spawnTurretAtEdge(arena, nil, enemyType)
+                    elseif enemyType.isCarrier then
+                        enemy = entities.spawnCarrierAtEdge(arena, player, nil)
+                    elseif enemyType.isMine then
+                        enemy = entities.spawnMineAtEdge(arena, player, nil)
+                    elseif enemyType.isFlapper then
+                        enemy = entities.spawnFlapperAtEdge(arena, nil)
                     else
                         enemy = entities.spawnEnemyAtEdge(arena, player, nil, enemyType)
                     end
@@ -64,11 +126,13 @@ local function startGame()
     enemiesClearedTime = nil
     playerLevel = 0
     pendingLevelUp = false
+    gameLog = {}
     events.clear()
 
     -- Clear system world references (required for restart)
     local allSystems = {
         systems.playerInput, systems.movementDelay, systems.seeking,
+        systems.fleeing, systems.spawner, systems.mineDetector, systems.oscillation,
         systems.attraction, systems.movement, systems.bounce,
         systems.arenaClamp, systems.lifetime, systems.damageCooldown,
         systems.invulnerability, systems.shooting, systems.flash,
@@ -94,6 +158,32 @@ local function startGame()
         arena.y + arena.height / 2
     )
     world:addEntity(player)
+
+    -- Apply debug settings if enabled
+    if config.debug.enabled then
+        score = config.debug.startSize
+        currentWave = config.debug.startWave - 1  -- so first spawn is startWave
+        playerLevel = math.floor(score / config.levelUp.sizePerLevel)
+
+        -- Apply size growth corresponding to starting score
+        local accumulatedGrowth = score * config.experience.growthAmount
+        player.Collider.radius = player.Collider.radius + accumulatedGrowth
+        player.Render.radius = player.Render.radius + accumulatedGrowth
+        player.ArenaClamp.margin = player.ArenaClamp.margin + accumulatedGrowth
+
+        if config.debug.startMaxHealth then
+            player.Health.max = config.debug.startMaxHealth
+        end
+        if config.debug.startHealth then
+            player.Health.current = config.debug.startHealth
+        else
+            player.Health.current = player.Health.max
+        end
+
+        player.PlayerInput.speed = player.PlayerInput.speed * config.debug.speedMultiplier
+
+        logEvent("DEBUG MODE: Wave " .. config.debug.startWave .. ", Size " .. score)
+    end
 
     -- Helper to flash an entity red
     local function flashEntity(entity)
@@ -142,6 +232,10 @@ local function startGame()
                 -- Enemy survived, flash it
                 flashEntity(data.enemy)
             end
+        elseif data.type == "mine_exploded" then
+            data.player.Health.current = data.player.Health.current - data.damage
+            flashEntity(data.player)
+            makeInvulnerable(data.player)
         elseif data.type == "experience_collected" then
             score = score + data.value
             -- Grow player
@@ -154,6 +248,7 @@ local function startGame()
             local newLevel = math.floor(score / config.levelUp.sizePerLevel)
             if newLevel > playerLevel then
                 playerLevel = newLevel
+                pickLevelUpChoices()
                 pendingLevelUp = true
             end
         end
@@ -166,6 +261,16 @@ local function startGame()
         end
     end)
 
+    -- Handle carrier spawning enemies
+    events.on("enemy_spawned", function(data)
+        enemiesAlive = enemiesAlive + 1
+    end)
+
+    -- Handle mine removal (when exploding or killed)
+    events.on("mine_removed", function(data)
+        enemiesAlive = enemiesAlive - 1
+    end)
+
     gameState = "playing"
 end
 
@@ -175,6 +280,16 @@ local function drawCenteredText(text, font, color, y)
     love.graphics.setColor(color[1], color[2], color[3], color[4] or 1)
     local textW = font:getWidth(text)
     love.graphics.print(text, (screenW - textW) / 2, y)
+end
+
+local function drawEventLog()
+    love.graphics.setFont(promptFont)
+    love.graphics.setColor(0.6, 0.6, 0.6)
+    local y = 10
+    for _, entry in ipairs(gameLog) do
+        love.graphics.print(entry, 10, y)
+        y = y + 18
+    end
 end
 
 function love.load()
@@ -257,6 +372,7 @@ function love.draw()
         drawCenteredText("game over", titleFont, {0.9, 0.2, 0.2}, screenH / 3)
         drawCenteredText("size: " .. score, storyFont, {1, 1, 1}, screenH / 2)
         drawCenteredText("press enter to play again", promptFont, {0.5, 0.5, 0.5}, screenH * 2 / 3)
+        drawEventLog()
         return
     end
 
@@ -264,6 +380,7 @@ function love.draw()
         drawCenteredText("you survived the winter!", titleFont, {0.2, 0.8, 0.2}, screenH / 3)
         drawCenteredText("size: " .. score, storyFont, {1, 1, 1}, screenH / 2)
         drawCenteredText("press enter to play again", promptFont, {0.5, 0.5, 0.5}, screenH * 2 / 3)
+        drawEventLog()
         return
     end
 
@@ -272,6 +389,7 @@ function love.draw()
         drawCenteredText("WASD to move, click to shoot", storyFont, {0.7, 0.7, 0.7}, screenH / 2 - 30)
         drawCenteredText("press escape to resume", promptFont, {0.5, 0.5, 0.5}, screenH / 2 + 20)
         drawCenteredText("press R to restart", promptFont, {0.5, 0.5, 0.5}, screenH / 2 + 50)
+        drawCenteredText("press Shift+Q to quit", promptFont, {0.5, 0.5, 0.5}, screenH / 2 + 80)
         return
     end
 
@@ -336,26 +454,21 @@ function love.draw()
         drawCenteredText("Choose an upgrade:", storyFont, {1, 1, 1}, screenH / 3)
 
         local optionY = screenH / 2 - 30
-        drawCenteredText("1. Speed Boost (+10%)", storyFont, {0.8, 0.8, 0.8}, optionY)
-        drawCenteredText("2. Heal +8 HP", storyFont, {0.8, 0.8, 0.8}, optionY + 40)
-        drawCenteredText("3. Max HP +5", storyFont, {0.8, 0.8, 0.8}, optionY + 80)
+        for i, key in ipairs(levelUpChoices) do
+            drawCenteredText(i .. ". " .. upgrades[key].label, storyFont, {0.8, 0.8, 0.8}, optionY + (i-1) * 40)
+        end
     end
 end
 
 function love.keypressed(key)
     -- Level up selection (before other key handling)
     if pendingLevelUp then
-        if key == "1" then
-            -- Speed boost
-            player.PlayerInput.speed = player.PlayerInput.speed * config.levelUp.speedMultiplier
-            pendingLevelUp = false
-        elseif key == "2" then
-            -- Heal +8 HP (capped at max)
-            player.Health.current = math.min(player.Health.current + config.levelUp.healAmount, player.Health.max)
-            pendingLevelUp = false
-        elseif key == "3" then
-            -- Max HP increase (no heal)
-            player.Health.max = player.Health.max + config.levelUp.maxHpIncrease
+        local choice = tonumber(key)
+        if choice and choice >= 1 and choice <= #levelUpChoices then
+            local upgradeKey = levelUpChoices[choice]
+            local upgrade = upgrades[upgradeKey]
+            upgrade.apply(player, world)
+            logEvent("Level " .. playerLevel .. ": " .. upgrade.label)
             pendingLevelUp = false
         end
         return  -- Don't process other keys during level up
@@ -369,6 +482,8 @@ function love.keypressed(key)
         gameState = "playing"
     elseif key == "r" and gameState == "paused" then
         startGame()
+    elseif key == "q" and gameState == "paused" and love.keyboard.isDown("lshift", "rshift") then
+        gameState = "gameover"
     end
 end
 
