@@ -4,7 +4,7 @@
   "description": "Bounce Arena - A Love2D game",
   "scripts": {
     "test": "lua game/spec/run_tests.lua",
-    "build": "love.js game dist -t \"Bounce Arena\" -c",
+    "build": "love.js game dist -t \"Bounce Arena\" -c -m 67108864",
     "serve": "pnpm build && npx serve dist",
     "clean": "rm -rf dist"
   },
