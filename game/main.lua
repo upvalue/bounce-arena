@@ -14,6 +14,9 @@ local currentWave = 0
 local gameTime = 0
 local enemiesAlive = 0
 local projectilesActive = 0
+local enemiesClearedTime = nil  -- for adaptive wave mode
+local playerLevel = 0
+local pendingLevelUp = false  -- true when waiting for player to choose upgrade
 
 -- Fonts
 local titleFont
@@ -58,31 +61,32 @@ local function startGame()
     gameTime = 0
     enemiesAlive = 0
     projectilesActive = 0
+    enemiesClearedTime = nil
+    playerLevel = 0
+    pendingLevelUp = false
     events.clear()
 
-    -- Always create a fresh world - more robust than trying to clear/reuse
+    -- Clear system world references (required for restart)
+    local allSystems = {
+        systems.playerInput, systems.movementDelay, systems.seeking,
+        systems.attraction, systems.movement, systems.bounce,
+        systems.arenaClamp, systems.lifetime, systems.damageCooldown,
+        systems.invulnerability, systems.shooting, systems.flash,
+        systems.collision, systems.render, systems.aimingLine, systems.hud
+    }
+    for _, sys in ipairs(allSystems) do
+        sys.world = nil
+    end
+
+    -- Create fresh world
     world = tiny.world()
     world.arena = arena
     world.config = config
 
     -- Add systems in order (update systems first, then render systems)
-    -- This also triggers onAddToWorld which resets system internal state
-    world:addSystem(systems.playerInput)
-    world:addSystem(systems.movementDelay)
-    world:addSystem(systems.seeking)
-    world:addSystem(systems.attraction)
-    world:addSystem(systems.movement)
-    world:addSystem(systems.bounce)
-    world:addSystem(systems.arenaClamp)
-    world:addSystem(systems.lifetime)
-    world:addSystem(systems.damageCooldown)
-    world:addSystem(systems.invulnerability)
-    world:addSystem(systems.shooting)
-    world:addSystem(systems.flash)
-    world:addSystem(systems.collision)
-    world:addSystem(systems.render)
-    world:addSystem(systems.aimingLine)
-    world:addSystem(systems.hud)
+    for _, sys in ipairs(allSystems) do
+        world:addSystem(sys)
+    end
 
     -- Create player at center
     player = entities.createPlayer(
@@ -145,6 +149,13 @@ local function startGame()
             player.Collider.radius = player.Collider.radius + growth
             player.Render.radius = player.Render.radius + growth
             player.ArenaClamp.margin = player.ArenaClamp.margin + growth
+
+            -- Check for level up
+            local newLevel = math.floor(score / config.levelUp.sizePerLevel)
+            if newLevel > playerLevel then
+                playerLevel = newLevel
+                pendingLevelUp = true
+            end
         end
     end)
 
@@ -178,6 +189,7 @@ end
 
 function love.update(dt)
     if gameState ~= "playing" then return end
+    if pendingLevelUp then return end  -- Pause during level selection
 
     -- Update input state from Love2D
     input.update()
@@ -185,12 +197,33 @@ function love.update(dt)
     -- Update game time
     gameTime = gameTime + dt
 
-    -- Wave spawning based on start times
+    -- Wave spawning (fixed or adaptive mode)
     local nextWave = currentWave + 1
     if nextWave <= #config.waves then
         local waveConfig = config.waves[nextWave]
-        if gameTime >= waveConfig.start then
+        local shouldSpawn = false
+
+        if config.waveMode == "fixed" then
+            -- Fixed mode: spawn at configured time
+            shouldSpawn = gameTime >= waveConfig.start
+        else
+            -- Adaptive mode: spawn after delay when enemies cleared, or at fixed time
+            if enemiesAlive <= 0 then
+                if enemiesClearedTime == nil then
+                    enemiesClearedTime = gameTime
+                end
+                local timeSinceCleared = gameTime - enemiesClearedTime
+                shouldSpawn = timeSinceCleared >= config.adaptiveWave.delay
+                           or gameTime >= waveConfig.start
+            elseif gameTime >= waveConfig.start then
+                -- Fixed time passed while enemies still alive - spawn anyway
+                shouldSpawn = true
+            end
+        end
+
+        if shouldSpawn then
             spawnWave(waveConfig)
+            enemiesClearedTime = nil  -- reset for next wave
         end
     end
 
@@ -254,18 +287,80 @@ function love.draw()
     local minutes = math.floor(gameTime / 60)
     local seconds = math.floor(gameTime % 60)
     local timeStr = string.format("%d:%02d", minutes, seconds)
-    local hud = string.format("Time: %s   Wave: %d/%d   Size: %d   HP: %d/%d   Ammo: %d/%d",
-        timeStr, currentWave, #config.waves, score, player.Health.current, player.Health.max,
-        config.projectile.maxCount - projectilesActive, config.projectile.maxCount)
+
+    -- Calculate next wave countdown
+    local nextWaveStr = ""
+    local nextWave = currentWave + 1
+    if nextWave <= #config.waves then
+        local waveConfig = config.waves[nextWave]
+        local timeUntil
+
+        if config.waveMode == "fixed" then
+            timeUntil = math.max(0, waveConfig.start - gameTime)
+        else
+            -- Adaptive mode
+            if enemiesClearedTime then
+                local adaptiveTime = config.adaptiveWave.delay - (gameTime - enemiesClearedTime)
+                local fixedTime = waveConfig.start - gameTime
+                timeUntil = math.max(0, math.min(adaptiveTime, fixedTime))
+            else
+                timeUntil = math.max(0, waveConfig.start - gameTime)
+            end
+        end
+
+        if timeUntil < 5 then
+            nextWaveStr = string.format("   Next: %.1fs", timeUntil)
+        end
+    end
+
+    local hud = string.format("Time: %s   Wave: %d/%d   Level: %d   Size: %d   HP: %d/%d   Ammo: %d/%d%s",
+        timeStr, currentWave, #config.waves, playerLevel, score, player.Health.current, player.Health.max,
+        config.projectile.maxCount - projectilesActive, config.projectile.maxCount, nextWaveStr)
     love.graphics.print(hud, 10, 10)
 
     -- Run draw systems
     world:update(0, function(_, system)
         return system.isDrawSystem
     end)
+
+    -- Level up overlay (drawn on top of gameplay)
+    if pendingLevelUp then
+        local screenW = love.graphics.getWidth()
+
+        -- Draw semi-transparent overlay
+        love.graphics.setColor(0, 0, 0, 0.7)
+        love.graphics.rectangle("fill", 0, 0, screenW, screenH)
+
+        -- Draw level up UI
+        drawCenteredText("Level " .. playerLevel .. "!", titleFont, {1, 1, 0.2}, screenH / 4)
+        drawCenteredText("Choose an upgrade:", storyFont, {1, 1, 1}, screenH / 3)
+
+        local optionY = screenH / 2 - 30
+        drawCenteredText("1. Speed Boost (+10%)", storyFont, {0.8, 0.8, 0.8}, optionY)
+        drawCenteredText("2. Heal +8 HP", storyFont, {0.8, 0.8, 0.8}, optionY + 40)
+        drawCenteredText("3. Max HP +5", storyFont, {0.8, 0.8, 0.8}, optionY + 80)
+    end
 end
 
 function love.keypressed(key)
+    -- Level up selection (before other key handling)
+    if pendingLevelUp then
+        if key == "1" then
+            -- Speed boost
+            player.PlayerInput.speed = player.PlayerInput.speed * config.levelUp.speedMultiplier
+            pendingLevelUp = false
+        elseif key == "2" then
+            -- Heal +8 HP (capped at max)
+            player.Health.current = math.min(player.Health.current + config.levelUp.healAmount, player.Health.max)
+            pendingLevelUp = false
+        elseif key == "3" then
+            -- Max HP increase (no heal)
+            player.Health.max = player.Health.max + config.levelUp.maxHpIncrease
+            pendingLevelUp = false
+        end
+        return  -- Don't process other keys during level up
+    end
+
     if key == "return" and (gameState == "intro" or gameState == "gameover" or gameState == "won") then
         startGame()
     elseif key == "escape" and gameState == "playing" then

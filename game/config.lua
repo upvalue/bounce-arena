@@ -124,6 +124,16 @@ config.projectile = {
     maxEnemyBounces = 1
 }
 
+-- Wave mode: "fixed" or "adaptive"
+-- fixed: waves spawn at configured start times
+-- adaptive: next wave spawns 5s after enemies cleared, or at fixed time if passed
+config.waveMode = "adaptive"
+
+-- Adaptive wave settings
+config.adaptiveWave = {
+    delay = 5  -- seconds after all enemies killed before next wave
+}
+
 -- Wave definitions: start time and enemy counts by type
 config.waves = {
     -- each level should be 2:30 for a total playtime of 10 minutes
@@ -149,9 +159,17 @@ config.experience = {
     size = 4,
     value = 1,
     color = {0.3, 0.5, 1},  -- blue
-    attractRadius = 250,
+    attractRadius = 150,
     attractSpeed = 200,
     growthAmount = 0.04
+}
+
+-- Level up settings
+config.levelUp = {
+    sizePerLevel = 50,
+    speedMultiplier = 1.1,  -- 10% speed increase
+    healAmount = 8,         -- HP restored by heal option
+    maxHpIncrease = 5       -- max HP added (no heal)
 }
 
 return config
