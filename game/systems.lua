@@ -196,6 +196,17 @@ function systems.lifetime:process(e, dt)
     end
 end
 
+-- Fade system: updates render alpha based on lifetime for fading entities
+systems.fade = tiny.processingSystem()
+systems.fade.filter = tiny.requireAll("Lifetime", "FadesOut", "Render")
+function systems.fade:process(e, dt)
+    local total = e.Lifetime.total or 1
+    local remaining = e.Lifetime.remaining
+    local alpha = math.max(0, remaining / total)
+    local color = e.Render.color
+    color[4] = alpha * (e.Render.baseAlpha or 0.6)
+end
+
 -- Damage cooldown system: decrements cooldown timer
 systems.damageCooldown = tiny.processingSystem()
 systems.damageCooldown.filter = tiny.requireAll("DamageCooldown")
@@ -266,7 +277,8 @@ function systems.spawner:process(e, dt)
     spawner.timer = spawner.timer - dt
 
     if spawner.timer <= 0 then
-        local child = entities.createEnemy(e.x, e.y, spawner.target, config.enemies.fastTrooper)
+        -- Skip movement delay for carrier-spawned children
+        local child = entities.createEnemy(e.x, e.y, spawner.target, config.enemies.fastTrooper, { skipMovementDelay = true })
         self.world:addEntity(child)
         spawner.timer = spawner.interval
         events.emit("enemy_spawned", { enemy = child })

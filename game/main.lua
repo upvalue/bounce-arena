@@ -134,7 +134,7 @@ local function startGame()
         systems.playerInput, systems.movementDelay, systems.seeking,
         systems.fleeing, systems.spawner, systems.mineDetector, systems.oscillation,
         systems.attraction, systems.movement, systems.bounce,
-        systems.arenaClamp, systems.lifetime, systems.damageCooldown,
+        systems.arenaClamp, systems.lifetime, systems.fade, systems.damageCooldown,
         systems.invulnerability, systems.shooting, systems.flash,
         systems.collision, systems.render, systems.aimingLine, systems.hud
     }
@@ -269,6 +269,12 @@ local function startGame()
     -- Handle mine removal (when exploding or killed)
     events.on("mine_removed", function(data)
         enemiesAlive = enemiesAlive - 1
+        -- Show AOE explosion effect
+        local mine = data.mine
+        if mine.MineDetonator then
+            local aoeEffect = entities.createAoeEffect(mine.x, mine.y, mine.MineDetonator.aoeRadius)
+            world:addEntity(aoeEffect)
+        end
     end)
 
     gameState = "playing"

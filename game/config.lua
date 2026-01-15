@@ -137,7 +137,11 @@ config.turretProjectile = {
 -- Visual effects
 config.effects = {
     flashDuration = 0.1,
-    flashColor = {1, 0, 0}  -- red
+    flashColor = {1, 0, 0},  -- red
+    aoeExplosion = {
+        duration = 0.4,
+        color = {1, 0.3, 0.3, 0.6}  -- red with alpha
+    }
 }
 
 -- Player invulnerability after being hit
@@ -196,7 +200,7 @@ config.waves = {
     -- { start = 100, trooper = 20, toughTrooper = 8 },
 
     -- debug stage
-    { start = 160, flapper = 3},
+    { start = 160, mine = 2},
 
 
 }

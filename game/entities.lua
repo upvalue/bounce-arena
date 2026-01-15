@@ -413,4 +413,20 @@ function entities.spawnFlapperAtEdge(arena, rng)
     return entities.createFlapper(x, y, axis)
 end
 
+function entities.createAoeEffect(x, y, radius)
+    local cfg = config.effects.aoeExplosion
+    return {
+        x = x,
+        y = y,
+        Lifetime = { remaining = cfg.duration, total = cfg.duration },
+        FadesOut = true,
+        Render = {
+            type = "circle",
+            radius = radius,
+            color = {cfg.color[1], cfg.color[2], cfg.color[3], cfg.color[4]},
+            layer = 2  -- below enemies
+        }
+    }
+end
+
 return entities
