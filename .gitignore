@@ -1,4 +1,4 @@
 /lab
 
-/dist
+# /dist  # Now committing built files directly
 /node_modules
