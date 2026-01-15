@@ -1,5 +1,5 @@
--- Main entry point - delegates to game module
-local game = require("game")
+-- Main entry point - delegates to app module
+local game = require("app")
 
 function love.load()
     game.load()
