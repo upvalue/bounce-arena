@@ -10,14 +10,12 @@ local enabled = true
 
 -- Track file paths (relative to game folder)
 local trackFiles = {
-    "assets/music/01-a-night-of-dizzy-spells.mp3",
-    "assets/music/02-underclocked.mp3",
-    "assets/music/03-chibi-ninja.mp3",
-    "assets/music/04-all-of-us.mp3",
-    "assets/music/05-come-and-find-me.mp3",
-    "assets/music/06-searching.mp3",
-    "assets/music/07-were-the-resistors.mp3",
-    "assets/music/08-ascending.mp3",
+    "assets/music/01-a-night-of-dizzy-spells.ogg",
+    "assets/music/02-underclocked.ogg",
+    "assets/music/03-chibi-ninja.ogg",
+    "assets/music/04-all-of-us.ogg",
+    "assets/music/05-come-and-find-me.ogg",
+    "assets/music/06-searching.ogg",
 }
 
 -- Initialize the music system (call from love.load)
