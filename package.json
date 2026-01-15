@@ -1,10 +1,10 @@
 {
   "name": "recurse-jam",
   "version": "1.0.0",
-  "description": "Bounce Arena - A Love2D game",
+  "description": "Shape Seasons - A Love2D game",
   "scripts": {
     "test": "lua game/spec/run_tests.lua",
-    "build": "love.js game dist -t \"Bounce Arena\" -c -m 67108864",
+    "build": "love.js game dist -t \"Shape Seasons\" -c -m 67108864 -T template.html",
     "serve": "pnpm build && npx serve dist",
     "clean": "rm -rf dist"
   },

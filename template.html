@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{title}}</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      background: #1a1a2e;
+      color: #eee;
+      font-family: system-ui, -apple-system, sans-serif;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+    }
+
+    h1 {
+      margin-bottom: 1rem;
+      font-size: 1.5rem;
+      color: #fff;
+    }
+
+    #game-container {
+      position: relative;
+      border: 2px solid #333;
+      border-radius: 4px;
+      overflow: hidden;
+    }
+
+    #loadingCanvas, #canvas {
+      display: block;
+    }
+
+    #loadingCanvas {
+      background: #16213e;
+    }
+
+    #canvas {
+      display: none;
+    }
+
+    .controls {
+      margin-top: 1rem;
+      display: flex;
+      gap: 0.5rem;
+    }
+
+    button {
+      background: #0f3460;
+      color: #fff;
+      border: none;
+      padding: 0.5rem 1rem;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 0.875rem;
+    }
+
+    button:hover {
+      background: #1a4f7a;
+    }
+
+    footer {
+      margin-top: 2rem;
+      font-size: 0.75rem;
+      color: #888;
+      text-align: center;
+      line-height: 1.6;
+    }
+
+    footer a {
+      color: #e94560;
+    }
+
+    .credits {
+      margin-bottom: 1rem;
+    }
+
+    .powered-by {
+      color: #555;
+    }
+  </style>
+</head>
+<body>
+  <h1>{{title}}</h1>
+
+  <div id="game-container">
+    <canvas id="loadingCanvas" width="800" height="600"></canvas>
+    <canvas id="canvas" oncontextmenu="event.preventDefault()"></canvas>
+  </div>
+
+  <div class="controls">
+    <button onclick="goFullScreen()">Fullscreen</button>
+  </div>
+
+  <footer>
+    <div class="credits">
+      <strong>Credits</strong><br>
+      Ideas Guy: Phil<br>
+      Senior Product Manager: Mark<br>
+      Programming & Art: Claude<br>
+      Menu Screen: Flux 1 Dev<br>
+      Music: <a href="https://ericskiff.com/music/">Eric Skiff</a> (CC)
+    </div>
+    <div class="powered-by">
+      Built with <a href="https://love2d.org">LOVE</a> &
+      <a href="https://github.com/Davidobot/love.js">love.js</a>
+    </div>
+  </footer>
+
+  <script>
+    function goFullScreen() {
+      var canvas = document.getElementById("canvas");
+      if (canvas.requestFullscreen) canvas.requestFullscreen();
+      else if (canvas.webkitRequestFullscreen) canvas.webkitRequestFullscreen();
+      else if (canvas.mozRequestFullScreen) canvas.mozRequestFullScreen();
+    }
+
+    var loadingCtx = document.getElementById('loadingCanvas').getContext('2d');
+
+    function drawLoading(text) {
+      var canvas = loadingCtx.canvas;
+      loadingCtx.fillStyle = '#16213e';
+      loadingCtx.fillRect(0, 0, canvas.width, canvas.height);
+      loadingCtx.font = '1.5em system-ui, sans-serif';
+      loadingCtx.textAlign = 'center';
+      loadingCtx.fillStyle = '#e94560';
+      loadingCtx.fillText(text, canvas.width / 2, canvas.height / 2);
+    }
+
+    window.onload = function() { window.focus(); };
+    window.onclick = function() { window.focus(); };
+
+    // Prevent arrow keys and space from scrolling
+    window.addEventListener("keydown", function(e) {
+      if ([32, 37, 38, 39, 40].indexOf(e.keyCode) > -1) {
+        e.preventDefault();
+      }
+    }, false);
+
+    var Module = {
+      arguments: {{{arguments}}},
+      INITIAL_MEMORY: {{memory}},
+      printErr: console.error.bind(console),
+      canvas: (function() {
+        var canvas = document.getElementById('canvas');
+        canvas.addEventListener("webglcontextlost", function(e) {
+          alert('WebGL context lost. Please reload the page.');
+          e.preventDefault();
+        }, false);
+        return canvas;
+      })(),
+      setStatus: function(text) {
+        if (text) {
+          drawLoading(text);
+        } else if (Module.remainingDependencies === 0) {
+          document.getElementById('loadingCanvas').style.display = 'none';
+          document.getElementById('canvas').style.display = 'block';
+        }
+      },
+      totalDependencies: 0,
+      remainingDependencies: 0,
+      monitorRunDependencies: function(left) {
+        this.remainingDependencies = left;
+        this.totalDependencies = Math.max(this.totalDependencies, left);
+        Module.setStatus(left ? 'Loading... (' + (this.totalDependencies - left) + '/' + this.totalDependencies + ')' : '');
+      }
+    };
+
+    Module.setStatus('Downloading...');
+
+    window.onerror = function() {
+      Module.setStatus('Error - see console');
+      Module.setStatus = function(text) {
+        if (text) console.error('[post-exception]', text);
+      };
+    };
+
+    var applicationLoad = function() { Love(Module); };
+  </script>
+  <script src="game.js"></script>
+  <script async src="love.js" onload="applicationLoad()"></script>
+</body>
+</html>

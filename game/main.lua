@@ -800,8 +800,9 @@ function love.draw()
     love.graphics.print(gameState, 10, 10)
 
     -- Line 2: Player stats
-    local playerStats = string.format("HP: %d/%d   Ammo: %d/%d%s%s",
+    local playerStats = string.format("HP: %d/%d   XP: %d   Ammo: %d/%d%s%s",
         player.Health.current, player.Health.max,
+        score,
         config.projectile.maxCount - projectilesActive, config.projectile.maxCount,
         secondaryStr, abilityStr)
     love.graphics.print(playerStats, 10, 26)
