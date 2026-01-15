@@ -64,8 +64,9 @@ end
 systems.seeking = tiny.processingSystem()
 systems.seeking.filter = tiny.requireAll("x", "y", "vx", "vy", "SeeksTarget")
 function systems.seeking:process(e, dt)
-    -- Skip if movement is delayed
+    -- Skip if movement is delayed or frozen
     if e.MovementDelay then return end
+    if e.Frozen then return end
 
     local target = e.SeeksTarget.target
     if not target then return end
@@ -85,6 +86,9 @@ end
 systems.fleeing = tiny.processingSystem()
 systems.fleeing.filter = tiny.requireAll("x", "y", "vx", "vy", "FleesTarget")
 function systems.fleeing:process(e, dt)
+    -- Skip if frozen
+    if e.Frozen then return end
+
     local flee = e.FleesTarget
     local target = flee.target
     if not target then return end
@@ -119,6 +123,9 @@ end
 systems.oscillation = tiny.processingSystem()
 systems.oscillation.filter = tiny.requireAll("x", "y", "vx", "vy", "Oscillator")
 function systems.oscillation:process(e, dt)
+    -- Skip if frozen
+    if e.Frozen then return end
+
     local osc = e.Oscillator
     osc.traveled = osc.traveled + math.abs(osc.speed) * dt
 
@@ -133,6 +140,17 @@ function systems.oscillation:process(e, dt)
     else
         e.vx = 0
         e.vy = osc.direction * osc.speed
+    end
+end
+
+-- Freeze system: handles frozen state countdown for enemies
+systems.freeze = tiny.processingSystem()
+systems.freeze.filter = tiny.requireAll("Frozen")
+function systems.freeze:process(e, dt)
+    e.Frozen.remaining = e.Frozen.remaining - dt
+    if e.Frozen.remaining <= 0 then
+        e.Frozen = nil
+        self.world:addEntity(e)  -- refresh to remove from system
     end
 end
 
@@ -161,6 +179,9 @@ function systems.bounce:onAddToWorld(world)
     self.arena = world.arena
 end
 function systems.bounce:process(e, dt)
+    -- Skip entities that ignore arena bounds (e.g., sniper shots)
+    if e.IgnoresArenaBounds then return end
+
     local arena = self.arena
     if e.x <= arena.x or e.x >= arena.x + arena.width then
         e.vx = -e.vx
@@ -262,7 +283,12 @@ function systems.shooting:process(e, dt)
     if shooter.fireTimer <= 0 then
         -- Fire in all configured directions
         for _, dir in ipairs(shooter.directions) do
-            local proj = entities.createEnemyProjectile(e.x, e.y, dir[1], dir[2])
+            local proj
+            if e.IsBallTurret then
+                proj = entities.createBallTurretProjectile(e.x, e.y, dir[1], dir[2])
+            else
+                proj = entities.createEnemyProjectile(e.x, e.y, dir[1], dir[2])
+            end
             self.world:addEntity(proj)
         end
         shooter.fireTimer = shooter.fireRate
@@ -307,7 +333,7 @@ function systems.mineDetector:process(e, dt)
             self.world:addEntity(e)
         end
         if det.fuseTimer <= 0 then
-            -- Explode - deal AOE damage if player in range
+            -- Explode - deal AOE damage to player if in range
             if dist < det.aoeRadius and not player.Invulnerable then
                 events.emit("collision", {
                     type = "mine_exploded",
@@ -315,6 +341,30 @@ function systems.mineDetector:process(e, dt)
                     player = player,
                     damage = det.aoeDamage
                 })
+            end
+            -- Deal AOE damage to enemies in range
+            local enemiesToRemove = {}
+            for _, entity in ipairs(self.world.entities) do
+                if entity.Health and entity.DamagesPlayer and entity ~= e then
+                    local edx = entity.x - e.x
+                    local edy = entity.y - e.y
+                    local edist = math.sqrt(edx * edx + edy * edy)
+                    if edist < det.aoeRadius then
+                        entity.Health.current = entity.Health.current - det.aoeDamage
+                        if entity.Health.current <= 0 then
+                            table.insert(enemiesToRemove, entity)
+                        end
+                    end
+                end
+            end
+            -- Remove killed enemies and emit events
+            for _, enemy in ipairs(enemiesToRemove) do
+                events.emit("collision", {
+                    type = "mine_killed_enemy",
+                    mine = e,
+                    enemy = enemy
+                })
+                self.world:removeEntity(enemy)
             end
             events.emit("mine_removed", { mine = e })
             self.world:removeEntity(e)
@@ -326,6 +376,37 @@ function systems.mineDetector:process(e, dt)
     end
 end
 
+-- Bomb timer system: handles secondary weapon bomb fuse countdown and explosion
+systems.bombTimer = tiny.processingSystem()
+systems.bombTimer.filter = tiny.requireAll("x", "y", "BombTimer", "AoeExplosion")
+function systems.bombTimer:process(e, dt)
+    local bomb = e.BombTimer
+
+    -- Countdown
+    bomb.fuseRemaining = bomb.fuseRemaining - dt
+
+    -- Flash as fuse burns (accelerating)
+    bomb.flashTimer = bomb.flashTimer - dt
+    local flashInterval = 0.1 + (bomb.fuseRemaining / bomb.fuseTime) * 0.3
+    if bomb.flashTimer <= 0 then
+        e.Flash = { remaining = 0.1, color = {1, 0.5, 0} }
+        bomb.flashTimer = flashInterval
+        self.world:addEntity(e)
+    end
+
+    -- Explode when fuse runs out
+    if bomb.fuseRemaining <= 0 then
+        events.emit("secondary_explosion", {
+            type = "bomb",
+            x = e.x,
+            y = e.y,
+            radius = e.AoeExplosion.radius,
+            damage = e.AoeExplosion.damage
+        })
+        self.world:removeEntity(e)
+    end
+end
+
 -- Collision system: handles all collision detection and response
 systems.collision = tiny.system()
 systems.collision.filter = tiny.requireAll("x", "y", "Collider")
@@ -334,6 +415,7 @@ function systems.collision:onAddToWorld(world)
     self.enemies = {}
     self.projectiles = {}
     self.enemyProjectiles = {}
+    self.ballTurretProjectiles = {}  -- bounce off enemies
     self.experience = {}
 end
 function systems.collision:onAdd(e)
@@ -342,6 +424,10 @@ function systems.collision:onAdd(e)
     elseif e.EnemyProjectile then
         -- Enemy projectiles tracked separately (pass through enemies)
         table.insert(self.enemyProjectiles, e)
+        -- Ball turret projectiles also tracked for enemy bouncing
+        if e.BouncesOffEnemies then
+            table.insert(self.ballTurretProjectiles, e)
+        end
     elseif e.DamagesPlayer then
         table.insert(self.enemies, e)
     elseif e.DamagesEnemy then
@@ -369,6 +455,12 @@ function systems.collision:onRemove(e)
     for i = #self.enemyProjectiles, 1, -1 do
         if self.enemyProjectiles[i] == e then
             table.remove(self.enemyProjectiles, i)
+            break
+        end
+    end
+    for i = #self.ballTurretProjectiles, 1, -1 do
+        if self.ballTurretProjectiles[i] == e then
+            table.remove(self.ballTurretProjectiles, i)
             break
         end
     end
@@ -406,18 +498,58 @@ function systems.collision:update(dt)
                 damage = enemy.DamagesPlayer.amount
             })
 
-            -- Apply knockback: push enemy away from player
-            local dx = enemy.x - player.x
-            local dy = enemy.y - player.y
-            local dist = math.sqrt(dx * dx + dy * dy)
-            if dist > 0 then
-                enemy.vx = (dx / dist) * knockbackConfig.speed
-                enemy.vy = (dy / dist) * knockbackConfig.speed
-            end
+            -- Destroy enemy if flagged (e.g., troopers die on contact)
+            if enemy.DestroyedOnContact then
+                toRemove[enemy] = true
+                events.emit("collision", {
+                    type = "enemy_killed_on_contact",
+                    enemy = enemy,
+                    player = player
+                })
+            else
+                -- Apply knockback: push enemy away from player (skip for stationary enemies like mines)
+                if not enemy.MineDetonator then
+                    local dx = enemy.x - player.x
+                    local dy = enemy.y - player.y
+                    local dist = math.sqrt(dx * dx + dy * dy)
+                    if dist > 0 then
+                        enemy.vx = (dx / dist) * knockbackConfig.speed
+                        enemy.vy = (dy / dist) * knockbackConfig.speed
+                    end
+                end
 
-            -- Add cooldown so enemy can't immediately damage again
-            enemy.DamageCooldown = { remaining = knockbackConfig.cooldown }
-            self.world:addEntity(enemy)  -- refresh for cooldown system
+                -- Add cooldown so enemy can't immediately damage again
+                enemy.DamageCooldown = { remaining = knockbackConfig.cooldown }
+                self.world:addEntity(enemy)  -- refresh for cooldown system
+            end
+        end
+    end
+
+    -- Ball turret projectiles bounce off enemies (harmlessly)
+    for _, proj in ipairs(self.ballTurretProjectiles) do
+        if proj and not toRemove[proj] then
+            for _, enemy in ipairs(self.enemies) do
+                if enemy and not toRemove[enemy] and collides(proj, enemy) then
+                    -- Calculate bounce direction (reflect off enemy surface)
+                    local dx = proj.x - enemy.x
+                    local dy = proj.y - enemy.y
+                    local dist = math.sqrt(dx * dx + dy * dy)
+                    if dist > 0 then
+                        -- Normalize and reflect velocity
+                        local nx, ny = dx / dist, dy / dist
+                        local dot = proj.vx * nx + proj.vy * ny
+                        proj.vx = proj.vx - 2 * dot * nx
+                        proj.vy = proj.vy - 2 * dot * ny
+                        -- Push projectile out of enemy
+                        local overlap = (proj.Collider.radius + enemy.Collider.radius) - dist
+                        if overlap > 0 then
+                            proj.x = proj.x + nx * (overlap + 1)
+                            proj.y = proj.y + ny * (overlap + 1)
+                        end
+                    end
+                    break  -- Only bounce off one enemy per frame
+                end
+            end
         end
     end
 
@@ -427,9 +559,27 @@ function systems.collision:update(dt)
         if proj and not toRemove[proj] then
             for ei = #self.enemies, 1, -1 do
                 local enemy = self.enemies[ei]
-                if enemy and not toRemove[enemy] and collides(proj, enemy) then
-                    -- Apply damage to enemy
+                -- Skip if already hit by this piercing projectile
+                local alreadyHit = proj.Piercing and proj.Piercing.hitEnemies[enemy]
+                if enemy and not toRemove[enemy] and not alreadyHit and collides(proj, enemy) then
+                    -- Check for missile with ExplodesOnContact - triggers AOE explosion
+                    if proj.ExplodesOnContact then
+                        events.emit("secondary_explosion", {
+                            type = "missile",
+                            x = proj.x,
+                            y = proj.y,
+                            radius = proj.ExplodesOnContact.aoeRadius,
+                            damage = proj.ExplodesOnContact.aoeDamage
+                        })
+                        toRemove[proj] = true
+                        break  -- missile is consumed by explosion
+                    end
+
+                    -- Apply damage to enemy (OneHitKill guarantees kill)
                     local damage = proj.DamagesEnemy.amount
+                    if proj.OneHitKill and enemy.Health then
+                        damage = enemy.Health.max + 1
+                    end
                     if enemy.Health then
                         enemy.Health.current = enemy.Health.current - damage
                     end
@@ -438,11 +588,26 @@ function systems.collision:update(dt)
                     local killed = not enemy.Health or enemy.Health.current <= 0
                     if killed then
                         toRemove[enemy] = true
+                        -- If mine is killed, emit mine_removed so it doesn't explode
+                        if enemy.MineDetonator then
+                            events.emit("mine_removed", { mine = enemy })
+                        end
+                    else
+                        -- Trigger mine when damaged but not killed
+                        if enemy.MineDetonator and not enemy.MineDetonator.triggered then
+                            enemy.MineDetonator.triggered = true
+                            enemy.MineDetonator.fuseTimer = enemy.MineDetonator.fuseTime
+                            enemy.MineDetonator.flashTimer = 0
+                        end
                     end
 
-                    -- Bounce or destroy projectile
+                    -- Handle piercing projectiles (pass through enemies)
                     local projectileDestroyed = true
-                    if proj.EnemyBounces and proj.EnemyBounces.count < proj.EnemyBounces.max then
+                    if proj.Piercing then
+                        proj.Piercing.hitEnemies[enemy] = true
+                        projectileDestroyed = false
+                        -- Don't break - continue checking other enemies
+                    elseif proj.EnemyBounces and proj.EnemyBounces.count < proj.EnemyBounces.max then
                         -- Bounce: reflect velocity away from enemy
                         local dx = proj.x - enemy.x
                         local dy = proj.y - enemy.y
@@ -473,7 +638,11 @@ function systems.collision:update(dt)
                         killed = killed,
                         projectileDestroyed = projectileDestroyed
                     })
-                    break
+
+                    -- Only break if not piercing
+                    if not proj.Piercing then
+                        break
+                    end
                 end
             end
         end
@@ -574,6 +743,25 @@ function systems.render:process(e, dt)
         love.graphics.setLineWidth(1)
     elseif r.type == "oval" then
         love.graphics.ellipse("fill", e.x, e.y, r.width / 2, r.height / 2)
+    elseif r.type == "mine" then
+        -- Draw blast radius indicator only when triggered
+        if e.MineDetonator and e.MineDetonator.triggered then
+            love.graphics.setColor(color[1], color[2], color[3], 0.15)
+            love.graphics.circle("fill", e.x, e.y, r.blastRadius)
+            love.graphics.setColor(color[1], color[2], color[3], 0.3)
+            love.graphics.setLineWidth(1)
+            love.graphics.circle("line", e.x, e.y, r.blastRadius)
+        end
+        -- Draw mine body
+        love.graphics.setColor(color[1], color[2], color[3], color[4] or 1)
+        love.graphics.circle("fill", e.x, e.y, r.radius)
+    elseif r.type == "sniper" then
+        -- Draw rotated rectangle for sniper shot
+        love.graphics.push()
+        love.graphics.translate(e.x, e.y)
+        love.graphics.rotate(r.angle or 0)
+        love.graphics.rectangle("fill", -r.width/2, -r.height/2, r.width, r.height)
+        love.graphics.pop()
     end
 end
 

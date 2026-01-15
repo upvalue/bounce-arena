@@ -48,6 +48,10 @@ function entities.createEnemy(x, y, target, enemyType, options)
     if enemyType.movementDelay and not options.skipMovementDelay then
         enemy.MovementDelay = { remaining = enemyType.movementDelay }
     end
+    -- Mark as destroyed on contact with player
+    if enemyType.destroyedOnContact then
+        enemy.DestroyedOnContact = true
+    end
     return enemy
 end
 
@@ -157,7 +161,7 @@ end
 
 function entities.createTurret(x, y, turretType)
     turretType = turretType or config.enemies.xTurret
-    return {
+    local turret = {
         x = x,
         y = y,
         vx = 0,
@@ -180,6 +184,11 @@ function entities.createTurret(x, y, turretType)
             layer = 5
         }
     }
+    -- Add ball turret flag if this turret type fires bouncing projectiles
+    if turretType.isBallTurret then
+        turret.IsBallTurret = true
+    end
+    return turret
 end
 
 function entities.createEnemyProjectile(x, y, dirX, dirY)
@@ -198,6 +207,28 @@ function entities.createEnemyProjectile(x, y, dirX, dirY)
             radius = cfg.size,
             color = cfg.color,
             layer = 7
+        }
+    }
+end
+
+function entities.createBallTurretProjectile(x, y, dirX, dirY)
+    local cfg = config.ballTurretProjectile
+    return {
+        x = x,
+        y = y,
+        vx = dirX * cfg.speed,
+        vy = dirY * cfg.speed,
+        Collider = { radius = cfg.size },
+        Bounces = {},                    -- bounces off arena walls
+        BouncesOffEnemies = {},          -- bounces off enemies harmlessly
+        EnemyProjectile = true,          -- marker for enemy projectile
+        DamagesPlayer = { amount = cfg.damage },
+        Lifetime = { remaining = cfg.lifetime },
+        Render = {
+            type = "circle",
+            radius = cfg.size,
+            color = cfg.color,
+            layer = 9
         }
     }
 end
@@ -321,8 +352,9 @@ function entities.createMine(x, y, player)
         DamagesPlayer = { amount = 0 },  -- for collision tracking
         expValue = cfg.expValue,
         Render = {
-            type = "circle",
+            type = "mine",
             radius = cfg.size,
+            blastRadius = cfg.aoeRadius,
             color = cfg.color,
             layer = 5
         }
@@ -425,6 +457,115 @@ function entities.createAoeEffect(x, y, radius)
             radius = radius,
             color = {cfg.color[1], cfg.color[2], cfg.color[3], cfg.color[4]},
             layer = 2  -- below enemies
+        }
+    }
+end
+
+-- Secondary weapon: Bomb (dropped at player position, timed explosion)
+function entities.createBomb(x, y)
+    local cfg = config.secondaryWeapons.bomb
+    return {
+        x = x,
+        y = y,
+        vx = 0,
+        vy = 0,
+        BombTimer = {
+            fuseTime = cfg.fuseTime,
+            fuseRemaining = cfg.fuseTime,
+            flashTimer = 0
+        },
+        AoeExplosion = {
+            radius = cfg.aoeRadius,
+            damage = cfg.aoeDamage
+        },
+        Render = {
+            type = "circle",
+            radius = cfg.size,
+            color = {cfg.color[1], cfg.color[2], cfg.color[3]},
+            layer = 6
+        }
+    }
+end
+
+-- Secondary weapon: Missile (flies straight, explodes on enemy contact with AOE)
+function entities.createMissile(x, y, dirX, dirY)
+    local cfg = config.secondaryWeapons.missile
+    local len = math.sqrt(dirX * dirX + dirY * dirY)
+    local vx, vy = 0, 0
+    if len > 0 then
+        vx = (dirX / len) * cfg.speed
+        vy = (dirY / len) * cfg.speed
+    end
+
+    return {
+        x = x,
+        y = y,
+        vx = vx,
+        vy = vy,
+        Collider = { radius = cfg.size },
+        Bounces = {},
+        Lifetime = { remaining = 5 },
+        ExplodesOnContact = {
+            aoeRadius = cfg.aoeRadius,
+            aoeDamage = cfg.aoeDamage
+        },
+        DamagesEnemy = { amount = cfg.aoeDamage },
+        Render = {
+            type = "circle",
+            radius = cfg.size,
+            color = {cfg.color[1], cfg.color[2], cfg.color[3]},
+            layer = 8
+        }
+    }
+end
+
+-- Secondary weapon: Sniper (fast, one-hit kill, pierces enemies, ignores arena bounds)
+function entities.createSniperShot(x, y, dirX, dirY)
+    local cfg = config.secondaryWeapons.sniper
+    local len = math.sqrt(dirX * dirX + dirY * dirY)
+    local vx, vy = 0, 0
+    local angle = 0
+    if len > 0 then
+        vx = (dirX / len) * cfg.speed
+        vy = (dirY / len) * cfg.speed
+        angle = math.atan2(dirY, dirX)
+    end
+
+    return {
+        x = x,
+        y = y,
+        vx = vx,
+        vy = vy,
+        Collider = { radius = cfg.size },
+        IgnoresArenaBounds = {},
+        Lifetime = { remaining = 3 },
+        OneHitKill = {},
+        Piercing = { hitEnemies = {} },  -- passes through enemies
+        DamagesEnemy = { amount = 9999 },
+        Render = {
+            type = "sniper",
+            width = 20,
+            height = 4,
+            angle = angle,
+            color = {0.7, 0.7, 0.7},  -- gray
+            layer = 9
+        }
+    }
+end
+
+-- Visual effect for secondary weapon explosions (orange)
+function entities.createSecondaryAoeEffect(x, y, radius)
+    local cfg = config.effects.aoeExplosion
+    return {
+        x = x,
+        y = y,
+        Lifetime = { remaining = cfg.duration, total = cfg.duration },
+        FadesOut = true,
+        Render = {
+            type = "circle",
+            radius = radius,
+            color = {1, 0.6, 0.2, 0.6},  -- orange for secondary weapons
+            layer = 2
         }
     }
 end

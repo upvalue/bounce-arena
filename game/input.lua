@@ -8,7 +8,8 @@ input.state = {
     up = false,
     down = false,
     left = false,
-    right = false
+    right = false,
+    shift = false
 }
 
 input.mouse = {
@@ -24,6 +25,7 @@ function input.update()
         input.state.down = love.keyboard.isDown("s", "down")
         input.state.left = love.keyboard.isDown("a", "left")
         input.state.right = love.keyboard.isDown("d", "right")
+        input.state.shift = love.keyboard.isDown("lshift", "rshift")
     end
 
     if love and love.mouse then
@@ -52,7 +54,8 @@ function input.reset()
         up = false,
         down = false,
         left = false,
-        right = false
+        right = false,
+        shift = false
     }
     input.mouse = {
         x = 0,
