@@ -4,6 +4,7 @@ local entities = require("entities")
 local config = require("config")
 local input = require("input")
 local events = require("events")
+local music = require("music")
 
 -- Game state: "intro", "playing", "paused", "gameover", or "won"
 local gameState = "intro"
@@ -491,6 +492,47 @@ local function drawControls(startY)
     end
 end
 
+-- Music checkbox position and size (set in draw for responsive layout)
+local musicCheckbox = { x = 0, y = 0, size = 16 }
+
+local function drawMusicCheckbox(y)
+    local screenW = love.graphics.getWidth()
+    local label = "Music"
+    local labelWidth = promptFont:getWidth(label)
+    local checkboxSize = musicCheckbox.size
+    local totalWidth = checkboxSize + 8 + labelWidth
+    local startX = (screenW - totalWidth) / 2
+
+    -- Store position for click detection
+    musicCheckbox.x = startX
+    musicCheckbox.y = y
+
+    -- Draw checkbox
+    love.graphics.setColor(1, 1, 1)
+    love.graphics.setLineWidth(2)
+    love.graphics.rectangle("line", startX, y, checkboxSize, checkboxSize)
+
+    -- Draw checkmark if enabled
+    if music.isEnabled() then
+        love.graphics.setColor(0.3, 1, 0.3)
+        love.graphics.line(startX + 3, y + 8, startX + 6, y + 12, startX + 13, y + 4)
+    end
+
+    -- Draw label
+    love.graphics.setFont(promptFont)
+    love.graphics.setColor(1, 1, 1)
+    love.graphics.print(label, startX + checkboxSize + 8, y + 4)
+    love.graphics.setLineWidth(1)
+end
+
+local function isInsideCheckbox(mx, my)
+    -- Include checkbox and label area for easier clicking
+    local labelWidth = promptFont:getWidth("Music")
+    local totalWidth = musicCheckbox.size + 8 + labelWidth
+    return mx >= musicCheckbox.x and mx <= musicCheckbox.x + totalWidth and
+           my >= musicCheckbox.y and my <= musicCheckbox.y + musicCheckbox.size
+end
+
 function love.load()
     love.window.setTitle("Shape Seasons")
 
@@ -503,9 +545,17 @@ function love.load()
 
     -- Load images
     splashImage = love.graphics.newImage("assets/splash.png")
+
+    -- Initialize and start background music
+    music.init()
+    music.setVolume(config.music.volume)
+    music.setEnabled(config.music.enabled)
 end
 
 function love.update(dt)
+    -- Update music (independent of game state)
+    music.update()
+
     if gameState ~= "playing" then return end
     if pendingLevelUp then return end  -- Pause during level selection
     if pendingAbilitySelection then return end  -- Pause during ability selection
@@ -642,7 +692,8 @@ function love.draw()
 
         drawControls(105)
 
-        drawCenteredText("press enter to play", storyFont, {1, 1, 1}, 210)
+        drawMusicCheckbox(210)
+        drawCenteredText("press enter to play", storyFont, {1, 1, 1}, 240)
         return
     end
 
@@ -670,6 +721,7 @@ function love.draw()
         drawCenteredText("Escape - Resume", storyFont, {1, 1, 1}, 175)
         drawCenteredText("R - Restart", storyFont, {1, 1, 1}, 199)
         drawCenteredText("Shift+Q - Quit", storyFont, {1, 1, 1}, 223)
+        drawMusicCheckbox(260)
         return
     end
 
@@ -921,6 +973,14 @@ function love.keypressed(key)
 end
 
 function love.mousepressed(x, y, button)
+    -- Handle music checkbox click on intro and paused screens
+    if button == 1 and (gameState == "intro" or gameState == "paused") then
+        if isInsideCheckbox(x, y) then
+            music.toggle()
+            return
+        end
+    end
+
     if gameState ~= "playing" then return end
     if pendingLevelUp then return end
     if pendingAbilitySelection then return end

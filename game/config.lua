@@ -2,9 +2,15 @@
 -- All game settings in one place for easy tuning and testing
 
 local config = {}
+
+-- Music settings
+config.music = {
+    enabled = true,   -- start with music enabled
+    volume = 0.5      -- 0.0 to 1.0
+}
 -- Debug/testing settings (set enabled = true to use)
 config.debug = {
-    enabled = true,
+    enabled = false,
     startWave = 9,          -- skip to this wave (1 = normal start)
     startSize = 119,         -- starting score/size
     startHealth = nil,      -- starting HP (nil = use maxHp)
@@ -256,8 +262,8 @@ config.seasons = {
 config.waves = {
     -- Level 1: Spring (waves 1-5)
     { start = 0,  trooper = 7, season = "spring" },
-    { start = 20, trooper = 10, toughTrooper = 1 },
-    { start = 40, trooper = 13, toughTrooper = 5 },
+   { start = 20, trooper = 10, toughTrooper = 1 },
+    --[[{ start = 40, trooper = 13, toughTrooper = 5 },
     { start = 60, trooper = 16, toughTrooper = 7 },
     { start = 80, trooper = 20, toughTrooper = 8 },
 
@@ -265,7 +271,7 @@ config.waves = {
     { start = 100, trooper = 5, flapper = 2, season = "summer" },
     { start = 120, trooper = 5, carrier = 2},
     { start = 140, trooper = 10, carrier = 2, toughTrooper = 3},
-    { start = 160, trooper = 15, carrier = 2, toughTrooper = 3, flapper = 3},
+    { start = 160, trooper = 15, carrier = 2, toughTrooper = 3, flapper = 3},--]]
 
     -- Level 3: Autumn (waves 10-4) - secondary weapon selection
 
