@@ -11,7 +11,7 @@ config.music = {
 -- Debug/testing settings (set enabled = true to use)
 config.debug = {
     enabled = false,
-    startWave = 12,          -- skip to this wave (1 = normal start)
+    startWave = 13,          -- skip to this wave (1 = normal start)
     startSize = 119,         -- starting score/size
     startHealth = nil,      -- starting HP (nil = use maxHp)
     startMaxHealth = 10,    -- starting max HP (nil = use config.player.maxHp)

@@ -20,6 +20,7 @@ local playerLevel = 0
 local pendingLevelUp = false  -- true when waiting for player to choose upgrade
 local levelUpChoices = {}     -- random choices for current level up
 local gameLog = {}  -- event log for end game screen
+local totalDamageTaken = 0
 
 -- Season/level tracking
 local currentSeason = "spring"
@@ -189,6 +190,7 @@ local function startGame()
     playerLevel = 0
     pendingLevelUp = false
     gameLog = {}
+    totalDamageTaken = 0
     events.clear()
 
     -- Reset season state
@@ -310,15 +312,18 @@ local function startGame()
     events.on("collision", function(data)
         if data.type == "enemy_hit_player" then
             data.player.Health.current = data.player.Health.current - data.damage
+            totalDamageTaken = totalDamageTaken + data.damage
             flashEntity(data.player)
             makeInvulnerable(data.player)
         elseif data.type == "projectile_hit_player" then
             data.player.Health.current = data.player.Health.current - data.damage
+            totalDamageTaken = totalDamageTaken + data.damage
             flashEntity(data.player)
             makeInvulnerable(data.player)
             projectilesActive = projectilesActive - 1
         elseif data.type == "enemy_projectile_hit_player" then
             data.player.Health.current = data.player.Health.current - data.damage
+            totalDamageTaken = totalDamageTaken + data.damage
             flashEntity(data.player)
             makeInvulnerable(data.player)
         elseif data.type == "projectile_hit_enemy" then
@@ -337,6 +342,7 @@ local function startGame()
             end
         elseif data.type == "mine_exploded" then
             data.player.Health.current = data.player.Health.current - data.damage
+            totalDamageTaken = totalDamageTaken + data.damage
             flashEntity(data.player)
             makeInvulnerable(data.player)
         elseif data.type == "mine_killed_enemy" then
@@ -701,16 +707,18 @@ function love.draw()
     end
 
     if gameState == "gameover" then
-        drawCenteredText("game over", titleFont, {0.9, 0.2, 0.2}, screenH / 3)
-        drawCenteredText("size: " .. score, storyFont, {1, 1, 1}, screenH / 2)
+        local timeStr = string.format("%d:%02d", math.floor(gameTime / 60), math.floor(gameTime % 60))
+        drawCenteredText("game over", titleFont, {0.9, 0.2, 0.2}, screenH / 4)
+        drawCenteredText("xp: " .. score .. "   time: " .. timeStr .. "   damage: " .. totalDamageTaken, storyFont, {1, 1, 1}, screenH / 2 - 20)
         drawCenteredText("press enter to play again", promptFont, {0.5, 0.5, 0.5}, screenH * 2 / 3)
         drawEventLog()
         return
     end
 
     if gameState == "won" then
-        drawCenteredText("you survived the winter!", titleFont, {0.2, 0.8, 0.2}, screenH / 3)
-        drawCenteredText("size: " .. score, storyFont, {1, 1, 1}, screenH / 2)
+        local timeStr = string.format("%d:%02d", math.floor(gameTime / 60), math.floor(gameTime % 60))
+        drawCenteredText("you survived the winter!", titleFont, {0.2, 0.8, 0.2}, screenH / 4)
+        drawCenteredText("xp: " .. score .. "   time: " .. timeStr .. "   damage: " .. totalDamageTaken, storyFont, {1, 1, 1}, screenH / 2 - 20)
         drawCenteredText("press enter to play again", promptFont, {0.5, 0.5, 0.5}, screenH * 2 / 3)
         drawEventLog()
         return
